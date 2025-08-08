@@ -24,21 +24,21 @@
   // Returns allowed top-level tag prefixes for a given list note title
   // Called from: Update Lists (to limit types of note links to include in list notes)
   getAllowedTagPrefixesForNoteTitle: function(title) {
-    if (title.startsWith("People List")) return ["person"];
+    if (title.startsWith("People List")) return ["people"];
     if (title.startsWith("Reference List")) return ["reference"];
     if (title.startsWith("Software List")) return ["software"];
     if (title.startsWith("Horizons of Focus")) return ["p"]; // project notes only
     if (title.startsWith("Active Project List")) return ["p"];
     if (title.startsWith("Completed Project List")) return ["p"];
     if (title.startsWith("Canceled Project List")) return ["p"];
-    return ["person", "reference", "software", "horizon"]; // fallback
+    return ["people", "reference", "software", "horizon"]; // fallback
   },
 
 
-  // Determines if a note is person/software for use in r/ tag lookups
+  // Determines if a note is people/software for use in r/ tag lookups
   // Called from: Find Related Items
   classifyNoteType: function(tags) {
-    if (tags.some(tag => tag.startsWith("person"))) return "person";
+    if (tags.some(tag => tag.startsWith("people"))) return "people";
     if (tags.some(tag => tag.startsWith("software"))) return "software";
     return "unknown";
   },
@@ -268,10 +268,10 @@ generateUniqueNoteIdTag: async function(app, note) {
       // Get the current note
       const note = await app.notes.find(noteUUID);
       // Figure out what type of note this is (to determine the related r/ tag)
-      // This function only works for person or software type notes
+      // This function only works for people or software type notes
       const noteType = plugin.classifyNoteType(note.tags);
       if (noteType === "unknown") {
-        await app.alert("Missing person or software tag");
+        await app.alert("Missing people or software tag");
         return;
       }
       // Extract the bracketed text from the note title
@@ -424,10 +424,10 @@ generateUniqueNoteIdTag: async function(app, note) {
       // build finalTasks array of strings with task content strings
       const finalTasks = [
         ...deadlineTasks.map(t => `D: ${t.content.trim()}`),
-        ...primaryTasks.slice(0, 3).map(t => `P: ${t.content.trim()}`),
-        ...importantTasks.slice(0, 2).map(t => `I: ${t.content.trim()}`),
-        ...urgentTasks.slice(0, 2).map(t => `U: ${t.content.trim()}`),
-        ...quickTasks.slice(0, 3).map(t => `Q: ${t.content.trim()}`)
+        ...primaryTasks.slice(0, 5).map(t => `P: ${t.content.trim()}`),
+        ...importantTasks.slice(0, 5).map(t => `I: ${t.content.trim()}`),
+        ...urgentTasks.slice(0, 5).map(t => `U: ${t.content.trim()}`),
+        ...quickTasks.slice(0, 5).map(t => `Q: ${t.content.trim()}`)
       ];
 
       // convert the array into a markdown list of tasks
@@ -483,7 +483,7 @@ generateUniqueNoteIdTag: async function(app, note) {
       }
 
       // Step 4: Load all notes with a domain tag (d/*) once and categorize them 
-      // by tag (e.g. person/it-leadership)
+      // by tag (e.g. people/it-leadership)
       
       // First get all notes in any domain
       const allNotes = await app.filterNotes({ tag: "d" });
@@ -525,9 +525,9 @@ generateUniqueNoteIdTag: async function(app, note) {
           if (!subtag) continue;
 
           // Get note types allowed for linking on the current list note
-          // e.g., People List only allows links to notes tagged with 'person/*'
+          // e.g., People List only allows links to notes tagged with 'people/*'
           const allowedPrefixes = plugin.getAllowedTagPrefixesForNoteTitle(listNote.name);
-          // Get the domain of the current list note from it's title
+          // Get the domain of the current list note from its title
           const domain = plugin.extractDomainFromTitle(listNote.name);
 
           // If this section should use p/ tags (project lists or horizons)
@@ -647,7 +647,7 @@ generateUniqueNoteIdTag: async function(app, note) {
       // Get all notes tagged with this domain
       const allNotes = await app.filterNotes({ tag: `d/${domain}` });
 
-      // Build categorized lookup for matching notes by full tag (e.g., person/it-leadership)
+      // Build categorized lookup for matching notes by full tag (e.g., people/it-leadership)
       const categorized = {};
       for (const note of allNotes) {
         for (const tag of note.tags) {
