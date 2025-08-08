@@ -27,10 +27,10 @@
     if (title.startsWith("People List")) return ["people"];
     if (title.startsWith("Reference List")) return ["reference"];
     if (title.startsWith("Software List")) return ["software"];
-    if (title.startsWith("Horizons of Focus")) return ["p"]; // project notes only
-    if (title.startsWith("Active Project List")) return ["p"];
-    if (title.startsWith("Completed Project List")) return ["p"];
-    if (title.startsWith("Canceled Project List")) return ["p"];
+    if (title.startsWith("Horizons of Focus")) return ["project"]; // project notes only
+    if (title.startsWith("Active Project List")) return ["project"];
+    if (title.startsWith("Completed Project List")) return ["project"];
+    if (title.startsWith("Canceled Project List")) return ["project"];
     return ["people", "reference", "software", "horizon"]; // fallback
   },
 
@@ -124,14 +124,14 @@
         modified: new Date(note.updated)
       };
 
-      if (note.tags.includes("p/focus")) categories["Focus Projects"].push(noteData);
-      else if (note.tags.includes("p/active")) categories["Active Projects"].push(noteData);
-      else if (note.tags.includes("p/tracking")) categories["Tracking Projects"].push(noteData);
-      else if (note.tags.includes("p/on-hold")) categories["On Hold Projects"].push(noteData);
-      else if (note.tags.includes("p/future")) categories["Future Projects"].push(noteData);
-      else if (note.tags.includes("p/someday")) categories["Someday Projects"].push(noteData);
-      else if (note.tags.includes("p/completed")) categories["Completed Projects"].push(noteData);
-      else if (note.tags.includes("p/canceled")) categories["Canceled Projects"].push(noteData);
+      if (note.tags.includes("project/focus")) categories["Focus Projects"].push(noteData);
+      else if (note.tags.includes("project/active")) categories["Active Projects"].push(noteData);
+      else if (note.tags.includes("project/tracking")) categories["Tracking Projects"].push(noteData);
+      else if (note.tags.includes("project/on-hold")) categories["On Hold Projects"].push(noteData);
+      else if (note.tags.includes("project/future")) categories["Future Projects"].push(noteData);
+      else if (note.tags.includes("project/someday")) categories["Someday Projects"].push(noteData);
+      else if (note.tags.includes("project/completed")) categories["Completed Projects"].push(noteData);
+      else if (note.tags.includes("project/canceled")) categories["Canceled Projects"].push(noteData);
     }
 
     Object.entries(categories).forEach(([title, list]) => {
@@ -187,10 +187,10 @@ generateUniqueNoteIdTag: async function(app, note) {
         return;
       }
 
-      // Step 3: Validate that it’s a project (has a p/* tag)
-      const currentStatusTag = note.tags.find(tag => tag.startsWith("p/"));
+      // Step 3: Validate that it’s a project (has a project/* tag)
+      const currentStatusTag = note.tags.find(tag => tag.startsWith("project/"));
       if (!currentStatusTag) {
-        await app.alert("This note isn't tagged as a project (missing p/* tag).");
+        await app.alert("This note isn't tagged as a project (missing project/* tag).");
         return;
       }
 
@@ -216,14 +216,14 @@ generateUniqueNoteIdTag: async function(app, note) {
               type: "radio",
               value: currentStatusTag,
               options: [
-                { label: "Focus", value: "p/focus" },
-                { label: "Active", value: "p/active" },
-                { label: "On Hold", value: "p/on-hold" },
-                { label: "Tracking", value: "p/tracking" },
-                { label: "Future", value: "p/future" },
-                { label: "Someday", value: "p/someday" },
-                { label: "Completed", value: "p/completed" },
-                { label: "Canceled", value: "p/canceled" }
+                { label: "Focus", value: "project/focus" },
+                { label: "Active", value: "project/active" },
+                { label: "On Hold", value: "project/on-hold" },
+                { label: "Tracking", value: "project/tracking" },
+                { label: "Future", value: "project/future" },
+                { label: "Someday", value: "project/someday" },
+                { label: "Completed", value: "project/completed" },
+                { label: "Canceled", value: "project/canceled" }
               ]
             }
           ]
@@ -237,9 +237,9 @@ generateUniqueNoteIdTag: async function(app, note) {
 
       const [domainTag, statusTag] = response;
 
-      // Step 6: Remove any existing d/* and p/* tags
+      // Step 6: Remove any existing d/* and project/* tags
       for (const tag of note.tags) {
-        if (tag.startsWith("d/") || tag.startsWith("p/")) {
+        if (tag.startsWith("d/") || tag.startsWith("project/")) {
           await note.removeTag(tag);
         }
       }
@@ -280,7 +280,7 @@ generateUniqueNoteIdTag: async function(app, note) {
       const tagName = `r/${noteType}/${bracketText}`;
       // Find all notes tagged with that tag
       const relatedNotes = await app.filterNotes({ tag: tagName });
-      // Categorize all of those notes that have a p/ tag (indicating that they
+      // Categorize all of those notes that have a project/ tag (indicating that they
       // are projects)
       // TODO: need to handle reference type notes as well with a separate function
       const categorizedProjects = await plugin.categorizeProjectNotes(app, relatedNotes);
@@ -530,9 +530,9 @@ generateUniqueNoteIdTag: async function(app, note) {
           // Get the domain of the current list note from its title
           const domain = plugin.extractDomainFromTitle(listNote.name);
 
-          // If this section should use p/ tags (project lists or horizons)
-          if (allowedPrefixes.length === 1 && allowedPrefixes[0] === "p") {
-            const projectTag = `p/${subtag}`;
+          // If this section should use project/ tags (project lists or horizons)
+          if (allowedPrefixes.length === 1 && allowedPrefixes[0] === "project") {
+            const projectTag = `project/${subtag}`;
             const matchingProjects = (categorized[projectTag] || []).filter(n =>
               n.tags.includes(`d/${domain}`)
             );
@@ -593,7 +593,7 @@ generateUniqueNoteIdTag: async function(app, note) {
               section: { heading: { text: headingText } }
             });
 
-            continue; // skip the rest of the loop — already handled p/ tag
+            continue; // skip the rest of the loop — already handled project/ tag
           }
 
           // Regular tag matching for non-project sections
@@ -690,8 +690,8 @@ generateUniqueNoteIdTag: async function(app, note) {
         );
         matchingNotes.sort((a, b) => a.title.localeCompare(b.title));
 
-        // Special handling for project lists (tagged with p/)
-        const isProjectList = allowedPrefixes.includes("p");
+        // Special handling for project lists (tagged with project/)
+        const isProjectList = allowedPrefixes.includes("project");
         const projectMarkdownBlocks = [];
 
         if (isProjectList) {
@@ -755,64 +755,10 @@ generateUniqueNoteIdTag: async function(app, note) {
     }, // End Update Current List
 
     "Testing": async function(app, noteUUID) {
-      // Step 1: Ask if this is a child project
-      const response = await app.prompt("Project options", {
-        inputs: [
-          {
-            type: "checkbox",
-            label: "Is this a child project?"
-          }
-        ]
-      });
-    
-      // response will be a single boolean (true/false)
-      const isChildProject = response === true;
-    
-      if (!isChildProject) {
-        await app.alert("Not a child project. Done.");
-        return;
-      }
-    
-      // Step 2: If it is a child project, prompt for parent note
-      const result = await app.prompt("Select the parent project", {
-        inputs: [
-          {
-            type: "note",
-            label: "Choose a parent project"
-          }
-        ]
-      });
-    
-      if (!result) {
-        await app.alert("No parent project selected.");
-        return;
-      }
-    
-      const noteHandle = result;
-      const note = await app.notes.find(noteHandle.uuid);
-    
-      if (!note) {
-        await app.alert("Could not retrieve parent note details.");
-        return;
-      }
+      // This function is for unit testing global functions or any other testing
 
-      await app.alert("Created value before call: " + note.created);
-      const noteIdTag = await this.generateUniqueNoteIdTag(app, note);
+    
 
-/*
-      // Optional: Remove any existing note-id/* tags first
-      for (const tag of note.tags) {
-        if (tag.startsWith("note-id/")) {
-          await note.removeTag(tag);
-        }
-      }
-*/
-      //await note.addTag(noteIdTag);
-    
-      const createdDate = note.created;
-      const tags = note.tags?.join(", ") || "No tags";
-    
-      await app.alert(`Parent Project Selected:\nTitle: ${note.name}\nnote-id:\n${noteIdTag}\nCreated: ${createdDate}\nTags: ${tags}`);
     } // End Testing
   }
 }
