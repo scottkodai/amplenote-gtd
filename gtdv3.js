@@ -861,6 +861,9 @@
           }
         ]
       });
+      
+      await app.alert("Returned value: " + JSON.stringify(result));
+      
       // `result` will be null if user cancels
         if (!result) return;
 
@@ -873,7 +876,7 @@
           return;
         }
 
-      await app.alert("Returned value: " + JSON.stringify(result));
+      await app.alert("Parent Handle: " + JSON.stringify(parentHandle));
 /*
       try {
         await plugin.setParentChildRelationship(app, noteUUID, result.parent);
