@@ -373,24 +373,19 @@
     );
     if (!targetSection) return { updated: false, count: 0 };
 
-    // 2. Get the current note handle for title-based backlink search
+    // 2. Get the current note handle for backlinks
     const note = await app.notes.find(noteUUID);
 
     // 3. Get all open tasks from the current note
-    const ownTasks = await app.getNoteTasks({uuid: noteUUID});
+    const ownTasks = await app.getNoteTasks(noteUUID);
 
-    // 4. Find other notes that reference this note (by UUID or title link)
-    const backlinks = await app.filterNotes({ text: noteUUID }); // UUID search
-    const backlinksByName = await app.filterNotes({ text: note.name }); // Title link search
-
-    // Merge backlink lists
-    const backlinkNotes = [...backlinks, ...backlinksByName]
-      .filter(n => n.uuid !== noteUUID); // Exclude current note
+    // 4. Get backlinks (notes linking to this note)
+    const backlinks = await note.backlinks();
 
     // 5. From those notes, get tasks referencing this note
     let referencedTasks = [];
-    for (const bn of backlinkNotes) {
-      const tasks = await app.getNoteTasks({uuid: bn.uuid});
+    for (const bn of backlinks) {
+      const tasks = await app.getNoteTasks(bn.uuid);
       const matchingTasks = tasks.filter(t =>
         t.content.includes(note.name) || t.content.includes(noteUUID)
       );
