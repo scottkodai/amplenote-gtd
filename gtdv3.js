@@ -380,7 +380,49 @@
   // Called from: 
   // ===============================================================================================
   updateRelatedPeopleSection: async function(app, noteUUID) {
-    return { updated: false, count: 0 };
+    const sectionHeading = "Related People";
+
+    // Get all sections for the note
+    const sections = await app.getNoteSections({ uuid: noteUUID });
+    const targetSection = sections.find(s =>
+      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+    );
+    if (!targetSection) return { updated: false, count: 0 };
+
+    // Find all r/people/* tags on the current note
+    const note = await app.notes.find(noteUUID);
+    const peopleTags = note.tags.filter(t => t.startsWith("r/people/"));
+    if (peopleTags.length === 0) {
+      await app.replaceNoteContent(noteUUID, "_(No related people)_", {
+        section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      });
+      return { updated: true, count: 0 };
+    }
+
+    // Get matching people notes by note-id
+    const relatedPeople = [];
+    for (const tag of peopleTags) {
+      const noteId = tag.split("/")[2];
+      const matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+      if (matches.length > 0) {
+        relatedPeople.push(this.normalizeNoteHandle(matches[0]));
+      }
+    }
+
+    // Sort alphabetically
+    relatedPeople.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Build markdown list
+    const peopleList = relatedPeople.length
+      ? relatedPeople.map(n => `- [${n.name}](${n.url})`).join("\n")
+      : "_(No related people)_";
+
+    // Replace section content
+    await app.replaceNoteContent(noteUUID, peopleList, {
+      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+    });
+
+    return { updated: true, count: relatedPeople.length };
   }, // end updateRelatedPeopleSection
 
   // ===============================================================================================
