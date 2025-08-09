@@ -239,7 +239,7 @@
     // Add relationship tags (child note gets a tag identifying its parent; parent note
     // gets a tag identifying its child(ren))
     await child.addTag(`r/parent/${parentId}`);
-    await parent.addTag(`r/child/${parentId}`);
+    await parent.addTag(`r/child/${childId}`);
   }, // end setParentChildRelationship
 
   // ===============================================================================================
