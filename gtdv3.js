@@ -11,7 +11,7 @@
   // ===============================================================================================
   escapeBrackets: function(text) {
     return text.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-  },
+  }, // end escapeBrackets
 
   // ===============================================================================================
   // Extracts the first text found inside square brackets from the note title
@@ -20,7 +20,7 @@
   extractBracketText: function(title) {
     const match = title.match(/\[(.*?)\]/);
     return match ? match[1] : "";
-  },
+  }, // end extractBracketText
 
   // ===============================================================================================
   // Extracts bracketed domain from note titles (e.g. "[work]" → "work")
@@ -29,7 +29,7 @@
   extractDomainFromTitle: function(title) {
     const match = title.match(/\[(.*?)\]$/);
     return match ? match[1].toLowerCase() : null;
-  },
+  }, // end extractDomainFromTitle
 
   // ===============================================================================================
   // Returns allowed top-level tag prefixes for a given list note title
@@ -44,7 +44,7 @@
     if (title.startsWith("Completed Project List")) return ["project"];
     if (title.startsWith("Canceled Project List")) return ["project"];
     return ["people", "reference", "software", "horizon"]; // fallback
-  },
+  }, // end getAllowedTagPrefixesForNoteTitle
 
 
   // ===============================================================================================
@@ -55,7 +55,7 @@
     if (tags.some(tag => tag.startsWith("people"))) return "people";
     if (tags.some(tag => tag.startsWith("software"))) return "software";
     return "unknown";
-  },
+  }, // end classifyNoteType
 
   // ===============================================================================================
   // Formats grouped projects into markdown list with optional fallback
@@ -64,7 +64,7 @@
   formatMarkdownList: function(title, projects) {
     if (projects.length === 0) return `- ${title}\n    - _No matching projects_`;
     return `- ${title}\n` + projects.map(p => `    - [${p.title}](${p.url})`).join("\n");
-  },
+  }, // end formatMarkdownList
 
   // ===============================================================================================
   // Converts a deadline timestamp into Pacific date string
@@ -76,7 +76,7 @@
       timeZone: "America/Los_Angeles",
       year: "numeric", month: "short", day: "numeric"
     });
-  },
+  }, // end convertDeadlineToPacific
 
   // ===============================================================================================
   // Returns days until deadline
@@ -85,7 +85,7 @@
   daysUntilDeadline: function(deadlineTimestamp) {
     if (!deadlineTimestamp) return null;
     return (deadlineTimestamp * 1000 - Date.now()) / (1000 * 60 * 60 * 24);
-  },
+  }, // end daysUntilDeadline
 
   // ===============================================================================================
   // Ensures footnote references are uniquely numbered to avoid clashes
@@ -105,7 +105,7 @@
     });
 
     return { updatedContent, nextCounter: counter };
-  },
+  }, // end uniquifyFootnotes
 
   // ===============================================================================================
   // Loads all tasks from notes with a domain tag (e.g. d/work)
@@ -123,7 +123,7 @@
 
     cache[tag] = tasks; //store result in cache
     return tasks;
-  },
+  }, // end getAllTasksForTag
 
   // ===============================================================================================
   // Categorizes project notes by tag group (e.g. p/active, p/focus)
@@ -169,7 +169,26 @@
     });
 
     return categories;
-  },
+  }, // end categorizeProjectNotes
+
+// ===============================================================================================
+// Makes sure a note has a note-id tag and creates it if not
+// Called from: 
+// ===============================================================================================
+ensureNoteIdTag: async function (app, note) {
+  // Return existing note-id/* if present
+  const existing = note.tags.find(t => t.startsWith("note-id/"));
+  if (existing) return existing;
+
+  // Use your existing generator from v2 (already robust)
+  // We call through “this” so it can live alongside your helpers
+  const noteHandle = await app.findNote({ uuid: note.uuid }); // fills created/title/tags
+  const tag = await this.generateUniqueNoteIdTag(app, noteHandle);
+  const added = await note.addTag(tag); // returns boolean
+  if (!added) throw new Error("Could not add note-id tag");
+  return tag;
+}, // end ensureNoteIdTag
+
 // ===============================================================================================
 // Generates a unique note ID for tagging notes
 // Called from: 
@@ -192,7 +211,7 @@ generateUniqueNoteIdTag: async function(app, note) {
   }
 
   return candidate;
-},
+}, // end generateUniqueNoteIdTag
 
 // =================================================================================================
 // =================================================================================================
@@ -801,9 +820,20 @@ generateUniqueNoteIdTag: async function(app, note) {
     // This function is a placeholder for unit testing global functions or any other testing
     // =============================================================================================
     "Testing": async function(app, noteUUID) {
+      const plugin = this;
 
-    
+      const note = await app.notes.find(noteUUID);
+      if (!note) {
+        await app.alert("Note not found.");
+        return;
+      }
 
+      try {
+        const idTag = await plugin.ensureNoteIdTag(app, note);
+        await app.alert(`Note-ID tag set to: ${idTag}`);
+      } catch (err) {
+        await app.alert(`Error: ${err.message}`);
+      }
     } // End Testing
   }
 }
