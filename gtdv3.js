@@ -897,8 +897,8 @@
     "Update Child Projects": async function(app, noteUUID) {
       const sectionHeading = "Child Projects";
 
-      // Get sections for the note
-      const sections = await app.getNoteSections({uuid: noteUUID});
+      // Get sections for the note (safe note handle)
+      const sections = await app.getNoteSections({ uuid: noteUUID });
 
       // Find the first section with the matching heading (case-insensitive)
       const targetSection = sections.find(s => 
@@ -916,9 +916,9 @@
       // Sort alphabetically by name
       children.sort((a, b) => a.name.localeCompare(b.name));
 
-      // Build markdown list
+      // Build markdown list using each note's .url
       const childList = children.length
-        ? children.map(n => `- [[${n.name}]]`).join("\n")
+        ? children.map(n => `- [${n.name}](${n.url})`).join("\n")
         : "_(No child projects)_";
 
       // Replace section content
