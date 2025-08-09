@@ -171,47 +171,77 @@
     return categories;
   }, // end categorizeProjectNotes
 
-// ===============================================================================================
-// Makes sure a note has a note-id tag and creates it if not
-// Called from: 
-// ===============================================================================================
-ensureNoteIdTag: async function (app, note) {
-  // Return existing note-id/* if present
-  const existing = note.tags.find(t => t.startsWith("note-id/"));
-  if (existing) return existing;
+  // ===============================================================================================
+  // Establishes a parent/child relationship between two notes (intented for project notes).
+  // Ensures both notes have a note-id tag, then adds:
+  //   - r/child/<parent-note-id> to the child note
+  //   - r/parent/<parent-note-id> to the parent note
+  // Called from: 
+  // ===============================================================================================
+  setParentChildRelationship: async function (app, childUUID, parentUUID) {
 
-  // Use your existing generator from v2 (already robust)
-  // We call through “this” so it can live alongside your helpers
-  const noteHandle = await app.findNote({ uuid: note.uuid }); // fills created/title/tags
-  const tag = await this.generateUniqueNoteIdTag(app, noteHandle);
-  const added = await note.addTag(tag); // returns boolean
-  if (!added) throw new Error("Could not add note-id tag");
-  return tag;
-}, // end ensureNoteIdTag
+    // Load notes
+    const child = await app.notes.find(childUUID);
+    const parent = await app.notes.find(parentUUID);
+    if (!child) throw new Error("Child note not found.");
+    if (!parent) throw new Error("Parent note not found.");
 
-// ===============================================================================================
-// Generates a unique note ID for tagging notes
-// Called from: 
-// ===============================================================================================
-generateUniqueNoteIdTag: async function(app, note) {
-  // Use regex to extract YYYYMMDDHHMMSS from ISO 8601 string
-  const match = note.created.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-  if (!match) {
-    throw new Error("Invalid note.created format");
-  }
+    // Ensure both have note-ids
+    const childIdTag = await plugin.getNoteIdTag(app, child);
+    const childId = childIdTag.split("/")[1];
+    const parentIdTag = await plugin.getNoteIdTag(app, parent);
+    const parentId = parentIdTag.split("/")[1];
 
-  const [, year, month, day, hour, minute, second] = match;
-  const baseId = `${year}${month}${day}${hour}${minute}${second}`;
-  let candidate = `note-id/${baseId}`;
-  let counter = 1;
+    // Add relationship tags
+    await child.addTag(`r/child/${parentId}`);
+    await parent.addTag(`r/parent/${parentId}`);
+  }, // end setParentChildRelationship
 
-  // Loop to ensure uniqueness (if note-id/20250726141507 already exists)
-  while ((await app.filterNotes({ tag: candidate })).some(n => n.uuid !== note.uuid)) {
-    candidate = `note-id/${baseId}-${counter++}`;
-  }
+  // ===============================================================================================
+  // Returns a note's note-id tag if it exists, creating it if necessary. This function is only
+  // called if a relationship needs to be established between two notes.
+  // Called from: 
+  // ===============================================================================================
+  getNoteIdTag: async function (app, note) {
+    // Return existing note-id/* if present
+    const existing = note.tags.find(t => t.startsWith("note-id/"));
+    if (existing) return existing;
 
-  return candidate;
-}, // end generateUniqueNoteIdTag
+    // Use your existing generator from v2 (already robust)
+    // We call through “this” so it can live alongside your helpers
+    const noteHandle = await app.findNote({ uuid: note.uuid }); // fills created/title/tags
+    const tag = await this.generateUniqueNoteIdTag(app, noteHandle);
+    const added = await note.addTag(tag); // returns boolean
+    if (!added) throw new Error("Could not add note-id tag");
+    return tag;
+  }, // end getNoteIdTag
+
+  // ===============================================================================================
+  // Generates a unique note ID for tagging notes, based on the note's create timestamp.
+  // Uses a regex to pull just numbers from the ISO 8601 datestamp and then checks to see if
+  // there's a note-id collision (two notes created in the same second). If a collision is 
+  // detected, add a counter value and recheck until a unique value is found.
+  // Called from: 
+  // ===============================================================================================
+  generateUniqueNoteIdTag: async function(app, note) {
+    // Use regex to extract YYYYMMDDHHMMSS from ISO 8601 string
+    const match = note.created.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    if (!match) {
+      throw new Error("Invalid note.created format");
+    }
+
+    const [, year, month, day, hour, minute, second] = match;
+    const baseId = `${year}${month}${day}${hour}${minute}${second}`;
+    let candidate = `note-id/${baseId}`;
+    let counter = 1;
+
+    // Loop to ensure uniqueness (if note-id/20250726141507 already exists)
+    while ((await app.filterNotes({ tag: candidate })).some(n => n.uuid !== note.uuid)) {
+      candidate = `note-id/${baseId}-${counter++}`;
+    }
+
+    return candidate;
+  }, // end generateUniqueNoteIdTag
 
 // =================================================================================================
 // =================================================================================================
@@ -822,15 +852,15 @@ generateUniqueNoteIdTag: async function(app, note) {
     "Testing": async function(app, noteUUID) {
       const plugin = this;
 
-      const note = await app.notes.find(noteUUID);
-      if (!note) {
-        await app.alert("Note not found.");
-        return;
-      }
+      // Prompt for the parent note using Amplenote's search
+      const parentUUID = await app.prompt("Select the parent note:", {
+        type: "note"
+      });
+      if (!parentUUID) return; // cancelled
 
       try {
-        const idTag = await plugin.ensureNoteIdTag(app, note);
-        await app.alert(`Note-ID tag set to: ${idTag}`);
+        await plugin.setParentChildRelationship(app, noteUUID, parentUUID);
+        await app.alert("Parent/child relationship established.");
       } catch (err) {
         await app.alert(`Error: ${err.message}`);
       }
