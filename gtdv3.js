@@ -326,7 +326,7 @@
       : "_(No child projects)_";
 
     await app.replaceNoteContent(noteUUID, childList, {
-      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      section: { heading: { text: sectionHeading } }
     });
 
     return { updated: true, count: children.length };
@@ -353,7 +353,7 @@
       : "_(No parent projects)_";
 
     await app.replaceNoteContent(noteUUID, parentList, {
-      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      section: { heading: { text: sectionHeading } }
     });
 
     return { updated: true, count: parents.length };
@@ -380,24 +380,16 @@
     const ownTasks = await app.getNoteTasks(note);
 
     // 4. Find other notes that reference this note (by UUID or title link)
-    const backlinks = (await app.filterNotes({ text: noteUUID })) || [];
-    const backlinksByName = (await app.filterNotes({ text: note.name })) || [];
+    const backlinks = await app.filterNotes({ text: noteUUID }); // UUID search
+    const backlinksByName = await app.filterNotes({ text: note.name }); // Title link search
 
-    // Merge backlink lists & shallow clone into plain objects for safety
+    // Merge backlink lists
     const backlinkNotes = [...backlinks, ...backlinksByName]
-      .filter(n => n.uuid !== noteUUID) // exclude current note
-      .map(n => ({ ...n })); // clone into plain objects
+      .filter(n => n.uuid !== noteUUID); // Exclude current note
 
     // 5. From those notes, get tasks referencing this note
     let referencedTasks = [];
-    for (const bn of backlinks) {
-      const tasks = await app.getNoteTasks(bn);
-      const matchingTasks = tasks.filter(t =>
-        t.content.includes(note.name) || t.content.includes(noteUUID)
-      );
-      referencedTasks.push(...matchingTasks);
-    }
-    for (const bn of backlinksByName) {
+    for (const bn of backlinkNotes) {
       const tasks = await app.getNoteTasks(bn);
       const matchingTasks = tasks.filter(t =>
         t.content.includes(note.name) || t.content.includes(noteUUID)
@@ -432,7 +424,7 @@
 
     // 9. Replace section content
     await app.replaceNoteContent(noteUUID, taskLines.join("\n"), {
-      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      section: { heading: { text: sectionHeading } }
     });
 
     return { updated: true, count: uniqueTasks.length };
@@ -471,7 +463,7 @@
 
     // Replace section content
     await app.replaceNoteContent(noteUUID, vendorList, {
-      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      section: { heading: { text: sectionHeading } }
     });
 
     return { updated: true, count: relatedVendors.length };
@@ -523,7 +515,7 @@
 
     // Replace section content
     await app.replaceNoteContent(noteUUID, projectList, {
-      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      section: { heading: { text: sectionHeading } }
     });
 
     return { updated: true, count: relatedProjects.length };
@@ -573,7 +565,7 @@
 
     // Replace section content
     await app.replaceNoteContent(noteUUID, peopleList, {
-      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      section: { heading: { text: sectionHeading } }
     });
 
     return { updated: true, count: relatedPeople.length };
@@ -623,7 +615,7 @@
 
     // Replace section content
     await app.replaceNoteContent(noteUUID, refList, {
-      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      section: { heading: { text: sectionHeading } }
     });
 
     return { updated: true, count: relatedRefs.length };
@@ -673,7 +665,7 @@
 
     // Replace section content
     await app.replaceNoteContent(noteUUID, softwareList, {
-      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      section: { heading: { text: sectionHeading } }
     });
 
     return { updated: true, count: relatedSoftware.length };
