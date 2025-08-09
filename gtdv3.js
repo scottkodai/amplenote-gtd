@@ -236,9 +236,10 @@
     const parentIdTag = await this.getNoteIdTag(app, parent);
     const parentId = parentIdTag.split("/")[1];
 
-    // Add relationship tags
-    await child.addTag(`r/child/${parentId}`);
-    await parent.addTag(`r/parent/${parentId}`);
+    // Add relationship tags (child note gets a tag identifying its parent; parent note
+    // gets a tag identifying its child(ren))
+    await child.addTag(`r/parent/${parentId}`);
+    await parent.addTag(`r/child/${parentId}`);
   }, // end setParentChildRelationship
 
   // ===============================================================================================
