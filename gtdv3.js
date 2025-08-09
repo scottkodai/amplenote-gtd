@@ -301,6 +301,88 @@
 
 // =================================================================================================
 // =================================================================================================
+//                                     List Update functions
+// =================================================================================================
+// =================================================================================================
+
+  // ===============================================================================================
+  // Updates any existing Child Projects section with links to all child projects
+  // Called from: 
+  // ===============================================================================================
+  updateChildProjectsSection: async function(app, noteUUID) {
+    const sectionHeading = "Child Projects";
+
+    const sections = await app.getNoteSections({ uuid: noteUUID });
+    const targetSection = sections.find(s =>
+      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+    );
+    if (!targetSection) return { updated: false, count: 0 };
+
+    const children = await this.getChildNotes(app, noteUUID);
+    children.sort((a, b) => a.name.localeCompare(b.name));
+
+    const childList = children.length
+      ? children.map(n => `- [${n.name}](${n.url})`).join("\n")
+      : "_(No child projects)_";
+
+    await app.replaceNoteContent(noteUUID, childList, {
+      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+    });
+
+    return { updated: true, count: children.length };
+  }, //end updateChildProjectsSection
+
+  // ===============================================================================================
+  // Updates any existing Parent Projects section with links to all parent projects
+  // Called from: 
+  // ===============================================================================================
+  updateParentProjectsSection: async function(app, noteUUID) {
+    return { updated: false, count: 0 };
+  }, // end updateParentProjectsSection
+
+  // ===============================================================================================
+  // Updates any existing Related Tasks section with links to all related tasks
+  // Called from: 
+  // ===============================================================================================
+  updateRelatedTasksSection: async function(app, noteUUID) {
+    return { updated: false, count: 0 };
+  }, // end updateRelatedTasksSection
+
+  // ===============================================================================================
+  // Updates any existing Related Projects section with links to all related projects
+  // Called from: 
+  // ===============================================================================================
+  updateRelatedProjectsSection: async function(app, noteUUID) {
+    return { updated: false, count: 0 };
+  }, // end updateRelatedProjectsSection
+
+  // ===============================================================================================
+  // Updates any existing Related People section with links to all related people
+  // Called from: 
+  // ===============================================================================================
+  updateRelatedPeopleSection: async function(app, noteUUID) {
+    return { updated: false, count: 0 };
+  }, // end updateRelatedPeopleSection
+
+  // ===============================================================================================
+  // Updates any existing Related References section with links to all related references
+  // Called from: 
+  // ===============================================================================================
+  updateRelatedReferencesSection: async function(app, noteUUID) {
+    return { updated: false, count: 0 };
+  }, // end updateRelatedReferencesSection
+
+  // ===============================================================================================
+  // Updates any existing Related Software section with links to all related software
+  // Called from: 
+  // ===============================================================================================
+  updateRelatedSoftwareSection: async function(app, noteUUID) {
+    return { updated: false, count: 0 };
+  }, // end updateRelatedSoftwareSection
+
+
+// =================================================================================================
+// =================================================================================================
 //                                     Link Actions
 // =================================================================================================
 // =================================================================================================
@@ -902,43 +984,35 @@
 */
 
     // =============================================================================================
-    // Update Child Projects
-    // This function is a placeholder for testing parent child relationships
+    // Update Note
+    // This function is the orchestrator for updating the current note in whatever ways are 
+    // appropriate
     // =============================================================================================
-    "Update Child Projects": async function(app, noteUUID) {
-      const sectionHeading = "Child Projects";
+    "Update Note": async function(app, noteUUID) {
+    const plugin = this;
+    const staticSections = [
+        { name: "Related Tasks", fn: this.updateRelatedTasksSection },
+        { name: "Related Projects", fn: this.updateRelatedProjectsSection },
+        { name: "Related People", fn: this.updateRelatedPeopleSection },
+        { name: "Related References", fn: this.updateRelatedReferencesSection },
+        { name: "Related Software", fn: this.updateRelatedSoftwareSection },
+        { name: "Parent Projects", fn: this.updateParentProjectsSection },
+        { name: "Child Projects", fn: this.updateChildProjectsSection }
+      ];
 
-      // Get sections for the note (safe note handle)
-      const sections = await app.getNoteSections({ uuid: noteUUID });
-
-      // Find the first section with the matching heading (case-insensitive)
-      const targetSection = sections.find(s => 
-        s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
-      );
-
-      if (!targetSection) {
-        await app.alert(`Section "${sectionHeading}" not found — no changes made.`);
-        return;
+      const results = [];
+      for (const { name, fn } of staticSections) {
+        const result = await fn.call(this, app, noteUUID);
+        if (result.updated) {
+          results.push(`✅ ${name}: ${result.count} item(s)`);
+        }
       }
 
-      // Get the child notes
-      const children = await this.getChildNotes(app, noteUUID);
-
-      // Sort alphabetically by name
-      children.sort((a, b) => a.name.localeCompare(b.name));
-
-      // Build markdown list using each note's .url
-      const childList = children.length
-        ? children.map(n => `- [${n.name}](${n.url})`).join("\n")
-        : "_(No child projects)_";
-
-      // Replace section content
-      await app.replaceNoteContent(noteUUID, childList, {
-        section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
-      });
-
-      await app.alert(`Updated "${sectionHeading}" section with ${children.length} child project(s).`);
-    }, // end Update Child Projects
+      const summary = results.length
+        ? results.join("\n")
+        : "No sections updated.";
+      await app.alert(summary);
+    }, // end Update Note
 
     // =============================================================================================
     // Set Parent
