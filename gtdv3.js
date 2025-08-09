@@ -862,7 +862,7 @@
         ]
       });
       
-      await app.alert("Returned value: " + JSON.stringify(result));
+      // await app.alert("Returned value: " + JSON.stringify(result));
       
       // `result` will be null if user cancels
         if (!result) return;
@@ -876,15 +876,14 @@
           return;
         }
 
-      await app.alert("Parent UUID: " + JSON.stringify(parentHandle.uuid));
-/*
+      // await app.alert("Parent UUID: " + JSON.stringify(parentHandle.uuid));
+
       try {
         await plugin.setParentChildRelationship(app, noteUUID, parentHandle.uuid);
         await app.alert("Parent/child relationship established.");
       } catch (err) {
         await app.alert(`Error: ${err.message}`);
       }
-        */
     } // End Testing
   }
 }
