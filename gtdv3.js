@@ -480,7 +480,49 @@
   // Called from: 
   // ===============================================================================================
   updateRelatedSoftwareSection: async function(app, noteUUID) {
-    return { updated: false, count: 0 };
+    const sectionHeading = "Related Software";
+
+    // Get all sections for the note
+    const sections = await app.getNoteSections({ uuid: noteUUID });
+    const targetSection = sections.find(s =>
+      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+    );
+    if (!targetSection) return { updated: false, count: 0 };
+
+    // Find all r/software/* tags on the current note
+    const note = await app.notes.find(noteUUID);
+    const softwareTags = note.tags.filter(t => t.startsWith("r/software/"));
+    if (softwareTags.length === 0) {
+      await app.replaceNoteContent(noteUUID, "_(No related software)_", {
+        section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      });
+      return { updated: true, count: 0 };
+    }
+
+    // Get matching software notes by note-id
+    const relatedSoftware = [];
+    for (const tag of softwareTags) {
+      const noteId = tag.split("/")[2];
+      const matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+      if (matches.length > 0) {
+        relatedSoftware.push(this.normalizeNoteHandle(matches[0]));
+      }
+    }
+
+    // Sort alphabetically
+    relatedSoftware.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Build markdown list
+    const softwareList = relatedSoftware.length
+      ? relatedSoftware.map(n => `- [${n.name}](${n.url})`).join("\n")
+      : "_(No related software)_";
+
+    // Replace section content
+    await app.replaceNoteContent(noteUUID, softwareList, {
+      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+    });
+
+    return { updated: true, count: relatedSoftware.length };
   }, // end updateRelatedSoftwareSection
 
 
