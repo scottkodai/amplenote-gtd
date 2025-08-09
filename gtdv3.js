@@ -858,11 +858,20 @@
           {
             label: "Parent Note",
             type: "note",
-            name: "parent"
           }
         ]
       });
-      if (!result || !result.parent) return; // cancelled
+      // `result` will be null if user cancels
+        if (!result) return;
+
+        // For a single input, result is either the value or an array.
+        // For type:"note", it returns a note handle object { noteUUID, ... }
+        const parentHandle = Array.isArray(result) ? result[0] : result;
+
+        if (!parentHandle || !parentHandle.noteUUID) {
+          await app.alert("No note selected.");
+          return;
+        }
 
       await app.alert("Returned value: " + JSON.stringify(result));
 /*
