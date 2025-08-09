@@ -187,9 +187,9 @@
     if (!parent) throw new Error("Parent note not found.");
 
     // Ensure both have note-ids
-    const childIdTag = await plugin.getNoteIdTag(app, child);
+    const childIdTag = await this.getNoteIdTag(app, child);
     const childId = childIdTag.split("/")[1];
-    const parentIdTag = await plugin.getNoteIdTag(app, parent);
+    const parentIdTag = await this.getNoteIdTag(app, parent);
     const parentId = parentIdTag.split("/")[1];
 
     // Add relationship tags
