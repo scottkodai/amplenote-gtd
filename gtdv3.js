@@ -364,7 +364,70 @@
   // Called from: 
   // ===============================================================================================
   updateRelatedTasksSection: async function(app, noteUUID) {
-    return { updated: false, count: 0 };
+    const sectionHeading = "Related Tasks";
+
+    // 1. Find the section (don't add if it doesn't exist)
+    const sections = await app.getNoteSections({ uuid: noteUUID });
+    const targetSection = sections.find(s =>
+      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+    );
+    if (!targetSection) return { updated: false, count: 0 };
+
+    // 2. Get the current note handle for title-based backlink search
+    const note = await app.notes.find(noteUUID);
+
+    // 3. Get all open tasks from the current note
+    const ownTasks = await app.getNoteTasks(note);
+
+    // 4. Find other notes that reference this note (by UUID or title link)
+    const backlinks = await app.filterNotes({ text: noteUUID }); // UUID search
+    const backlinksByName = await app.filterNotes({ text: note.name }); // Title link search
+
+    // Merge backlink lists
+    const backlinkNotes = [...backlinks, ...backlinksByName]
+      .filter(n => n.uuid !== noteUUID); // Exclude current note
+
+    // 5. From those notes, get tasks referencing this note
+    let referencedTasks = [];
+    for (const bn of backlinkNotes) {
+      const tasks = await app.getNoteTasks(bn);
+      const matchingTasks = tasks.filter(t =>
+        t.content.includes(note.name) || t.content.includes(noteUUID)
+      );
+      referencedTasks.push(...matchingTasks);
+    }
+
+    // 6. Merge own tasks + referenced tasks, deduplicate by UUID
+    const allTasks = [...ownTasks, ...referencedTasks];
+    const uniqueTasks = Array.from(new Map(allTasks.map(t => [t.uuid, t])).values());
+
+    // 7. Sort by score descending
+    uniqueTasks.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    // 8. Build markdown list with deadlines & uniquified footnotes
+    let counter = 1;
+    const taskLines = uniqueTasks.map(task => {
+      let taskText = task.content.trim();
+
+      // Prepend deadline if present
+      if (task.deadline) {
+        const deadlineStr = this.convertDeadlineToPacific(task.deadline);
+        taskText = `(${deadlineStr}) ${taskText}`;
+      }
+
+      // Uniquify footnotes (handles refs & defs in one pass)
+      const { updatedContent, nextCounter } = this.uniquifyFootnotes(taskText, counter);
+      counter = nextCounter;
+
+      return `- ${updatedContent}`;
+    });
+
+    // 9. Replace section content
+    await app.replaceNoteContent(noteUUID, taskLines.join("\n"), {
+      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+    });
+
+    return { updated: true, count: uniqueTasks.length };
   }, // end updateRelatedTasksSection
 
   // ===============================================================================================
