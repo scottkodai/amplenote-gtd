@@ -288,8 +288,9 @@ generateUniqueNoteIdTag: async function(app, note) {
 
       // await app.alert(`Tags updated:\n- ${domainTag}\n- ${statusTag}`);
     }
-  }, // End Update Project Tags
 */
+  }, // End Update Project Tags
+
 
 // =================================================================================================
 // =================================================================================================
