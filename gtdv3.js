@@ -299,6 +299,130 @@
     return candidate;
   }, // end generateUniqueNoteIdTag
 
+  // ===============================================================================================
+  // Verifies top level type tags (domain, project, reference) are in place and 
+  // uses app.prompt to fix if needed
+  // Called from: 
+  // ===============================================================================================
+  ensureDomainAndTypeTags: async function (app, noteUUID) {
+    const note = await app.notes.find(noteUUID);
+    const existingTags = note.tags || [];
+
+    // Check if we already have at least one domain tag
+    const hasDomain = existingTags.some(tag => tag.startsWith("d/"));
+    // Check if we already have a top-level type tag (project/* or reference/*)
+    const hasType = existingTags.some(tag => tag.startsWith("project/") || tag.startsWith("reference/"));
+
+    // If both are present, nothing to do
+    if (hasDomain && hasType) return;
+
+    // Build prompt inputs dynamically based on what's missing
+    const inputs = [];
+
+    if (!hasDomain) {
+      inputs.push({
+        label: "Select domain tag(s)",
+        type: "tags",
+        limit: 2, // Allow d/home and/or d/work
+        placeholder: "Pick d/home, d/work, or both"
+      });
+    }
+
+    if (!hasType) {
+      inputs.push({
+        label: "Select top-level type tag",
+        type: "tags",
+        limit: 1, // Only one type tag allowed
+        placeholder: "Pick a project/* or reference/* tag"
+      });
+    }
+
+    if (inputs.length === 0) return; // Safety
+
+    const result = await app.prompt("Add missing tags for this note", { inputs });
+    if (!result) return; // User canceled
+
+    // result will be an array matching `inputs` order
+    let idx = 0;
+    if (!hasDomain) {
+      const domainTags = result[idx++];
+      if (domainTags) {
+        for (const tag of domainTags.split(",")) {
+          await note.addTag(tag.trim());
+        }
+      }
+    }
+
+    if (!hasType) {
+      const typeTag = result[idx++];
+      if (typeTag) {
+        await note.addTag(typeTag.trim());
+      }
+    }
+  }, // end ensureDomainAndTypeTags
+
+  // ===============================================================================================
+  // Uses app.prompt to help create relationships based on note-id
+  // Called from: either noteOption or linkOption
+  // ===============================================================================================
+  createRelationship: async function (app, noteUUID) {
+    // Step 1: Ensure domain and type tags before any relationship prompts
+    await this.ensureDomainAndTypeTags(app, noteUUID);
+
+    const note = await app.notes.find(noteUUID);
+
+    // Step 2: Ask for relationship type + related note in one prompt
+    const result = await app.prompt("Create a relationship", {
+      inputs: [
+        {
+          label: "Select a relationship type",
+          type: "select",
+          options: [
+            { label: "Parent Project", value: "parent" },
+            { label: "Child Project", value: "child" },
+            { label: "Related Person", value: "person" },
+            { label: "Related Software", value: "software" },
+            { label: "Related Reference", value: "reference" },
+            { label: "Related Vendor", value: "vendor" }
+          ]
+        },
+        {
+          label: "Select related note",
+          type: "note" // lets user pick any note
+        }
+      ],
+      actions: [
+        { label: "Add Another", value: "add" },
+        { label: "Done", value: "done" }
+      ]
+    });
+
+    if (!result) return; // user canceled
+
+    const [relType, relatedNote, action] = result;
+
+    // Step 3: Validate relationship type vs. selected note type if needed
+    // (Example validation logic placeholder)
+    const valid = await this.validateRelationshipType(app, relatedNote, relType);
+    if (!valid) {
+      await app.alert(`The selected note is not valid for a "${relType}" relationship.`);
+      return;
+    }
+
+    // Step 4: Apply relationship
+    if (relType === "parent" || relType === "child") {
+      await this.setParentChildRelationship(app, note, relatedNote, relType);
+    } else {
+      const noteIdTag = await this.getNoteIdTag(app, relatedNote);
+      await note.addTag(`r/${relType}/${noteIdTag}`);
+    }
+
+    // Step 5: Repeat if user chose Add Another
+    if (action === "add") {
+      await this.createRelationship(app, noteUUID);
+    }
+  }, // end createRelationship
+
 // =================================================================================================
 // =================================================================================================
 //                                     List Update functions
