@@ -337,7 +337,26 @@
   // Called from: 
   // ===============================================================================================
   updateParentProjectsSection: async function(app, noteUUID) {
-    return { updated: false, count: 0 };
+    const sectionHeading = "Parent Projects";
+
+    const sections = await app.getNoteSections({ uuid: noteUUID });
+    const targetSection = sections.find(s =>
+      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+    );
+    if (!targetSection) return { updated: false, count: 0 };
+
+    const parents = await this.getParentNotes(app, noteUUID);
+    parents.sort((a, b) => a.name.localeCompare(b.name));
+
+    const parentList = parents.length
+      ? parents.map(n => `- [${n.name}](${n.url})`).join("\n")
+      : "_(No parent projects)_";
+
+    await app.replaceNoteContent(noteUUID, parentList, {
+      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+    });
+
+    return { updated: true, count: parents.length };
   }, // end updateParentProjectsSection
 
   // ===============================================================================================
