@@ -871,15 +871,15 @@
         // For type:"note", it returns a note handle object { noteUUID, ... }
         const parentHandle = Array.isArray(result) ? result[0] : result;
 
-        if (!parentHandle || !parentHandle.noteUUID) {
+        if (!parentHandle || !parentHandle.uuid) {
           await app.alert("No note selected.");
           return;
         }
 
-      await app.alert("Parent Handle: " + JSON.stringify(parentHandle));
+      await app.alert("Parent UUID: " + JSON.stringify(parentHandle.uuid));
 /*
       try {
-        await plugin.setParentChildRelationship(app, noteUUID, result.parent);
+        await plugin.setParentChildRelationship(app, noteUUID, parentHandle.uuid);
         await app.alert("Parent/child relationship established.");
       } catch (err) {
         await app.alert(`Error: ${err.message}`);
