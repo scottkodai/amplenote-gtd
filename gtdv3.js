@@ -172,6 +172,17 @@
   }, // end categorizeProjectNotes
 
   // ===============================================================================================
+  // Returns a copy of the given note handle with a .url property added.
+  // Preserves all original metadata provided by Amplenote (created, updated, tags, etc.).
+  // ===============================================================================================
+  normalizeNoteHandle: function(note) {
+    return {
+      ...note,
+      url: `https://www.amplenote.com/notes/${note.uuid}`
+    };
+  }, // end normalizeNoteHandle
+
+  // ===============================================================================================
   // Returns an array of parent notes for the given noteUUID.
   // Looks for r/parent/* tags on the note and fetches each parent note.
   // ===============================================================================================
@@ -189,7 +200,7 @@
     const parents = [];
     for (const pid of parentIds) {
       const matches = await app.filterNotes({ tag: `note-id/${pid}` });
-      if (matches.length > 0) parents.push(matches[0]);
+      if (matches.length > 0) parents.push(this.normalizeNoteHandle(matches[0]));
     }
     return parents;
   }, // end getParentNotes
@@ -210,7 +221,7 @@
     const children = [];
     for (const cid of childIds) {
       const matches = await app.filterNotes({ tag: `note-id/${cid}` });
-      if (matches.length > 0) children.push(matches[0]);
+      if (matches.length > 0) children.push(this.normalizeNoteHandle(matches[0]));
     }
     return children;
   }, // end getChildNotes
