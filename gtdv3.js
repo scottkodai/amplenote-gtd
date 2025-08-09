@@ -1,28 +1,40 @@
 {
-  // ==================== Utility Functions ====================
+// =================================================================================================
+// =================================================================================================
+//                                     Utility Functions
+// =================================================================================================
+// =================================================================================================
 
+  // ===============================================================================================
   // Escapes square brackets from titles for literal matching in markdown links
   // Called from: Find Related Items, used to escape brackets in task content comparisons
+  // ===============================================================================================
   escapeBrackets: function(text) {
     return text.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
   },
 
+  // ===============================================================================================
   // Extracts the first text found inside square brackets from the note title
   // Called from: Find Related Items (to extract r/ tag from title)
+  // ===============================================================================================
   extractBracketText: function(title) {
     const match = title.match(/\[(.*?)\]/);
     return match ? match[1] : "";
   },
 
+  // ===============================================================================================
   // Extracts bracketed domain from note titles (e.g. "[work]" → "work")
   // Called from: Update Lists (to detect domains)
+  // ===============================================================================================
   extractDomainFromTitle: function(title) {
     const match = title.match(/\[(.*?)\]$/);
     return match ? match[1].toLowerCase() : null;
   },
 
+  // ===============================================================================================
   // Returns allowed top-level tag prefixes for a given list note title
   // Called from: Update Lists (to limit types of note links to include in list notes)
+  // ===============================================================================================
   getAllowedTagPrefixesForNoteTitle: function(title) {
     if (title.startsWith("People List")) return ["people"];
     if (title.startsWith("Reference List")) return ["reference"];
@@ -35,23 +47,29 @@
   },
 
 
+  // ===============================================================================================
   // Determines if a note is people/software for use in r/ tag lookups
   // Called from: Find Related Items
+  // ===============================================================================================
   classifyNoteType: function(tags) {
     if (tags.some(tag => tag.startsWith("people"))) return "people";
     if (tags.some(tag => tag.startsWith("software"))) return "software";
     return "unknown";
   },
 
+  // ===============================================================================================
   // Formats grouped projects into markdown list with optional fallback
   // Called from: Find Related Items
+  // ===============================================================================================
   formatMarkdownList: function(title, projects) {
     if (projects.length === 0) return `- ${title}\n    - _No matching projects_`;
     return `- ${title}\n` + projects.map(p => `    - [${p.title}](${p.url})`).join("\n");
   },
 
+  // ===============================================================================================
   // Converts a deadline timestamp into Pacific date string
   // Called from: Refresh Relevant Tasks
+  // ===============================================================================================
   convertDeadlineToPacific: function(deadlineTimestamp) {
     if (!deadlineTimestamp) return null;
     return new Date(deadlineTimestamp * 1000).toLocaleDateString("en-US", {
@@ -60,15 +78,19 @@
     });
   },
 
+  // ===============================================================================================
   // Returns days until deadline
   // Called from: Refresh Relevant Tasks
+  // ===============================================================================================
   daysUntilDeadline: function(deadlineTimestamp) {
     if (!deadlineTimestamp) return null;
     return (deadlineTimestamp * 1000 - Date.now()) / (1000 * 60 * 60 * 24);
   },
 
+  // ===============================================================================================
   // Ensures footnote references are uniquely numbered to avoid clashes
   // Called from: Refresh Relevant Tasks
+  // ===============================================================================================
   uniquifyFootnotes: function(content, counterStart) {
     let counter = counterStart;
     const refRegex = /\[\^([^\]\s]+?)\]/g;
@@ -85,8 +107,10 @@
     return { updatedContent, nextCounter: counter };
   },
 
+  // ===============================================================================================
   // Loads all tasks from notes with a domain tag (e.g. d/work)
   // Called from: Find Related Items, Refresh Relevant Tasks
+  // ===============================================================================================
   getAllTasksForTag: async function(app, tag, cache = {}) {
     if (cache[tag]) return cache[tag]; //return cached tasks if already loaded
 
@@ -101,8 +125,10 @@
     return tasks;
   },
 
+  // ===============================================================================================
   // Categorizes project notes by tag group (e.g. p/active, p/focus)
   // Called from: Find Related Items
+  // ===============================================================================================
   categorizeProjectNotes: async function(app, noteHandles) {
     const categories = {
       "Focus Projects": [],
@@ -144,9 +170,10 @@
 
     return categories;
   },
-// ==============================================================================================================
-//                                     Generate Unique Note ID for tagging
-// ==============================================================================================================
+// ===============================================================================================
+// Generates a unique note ID for tagging notes
+// Called from: 
+// ===============================================================================================
 generateUniqueNoteIdTag: async function(app, note) {
   // Use regex to extract YYYYMMDDHHMMSS from ISO 8601 string
   const match = note.created.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
@@ -167,8 +194,16 @@ generateUniqueNoteIdTag: async function(app, note) {
   return candidate;
 },
 
-// ==================== Link Actions ====================
+// =================================================================================================
+// =================================================================================================
+//                                     Link Actions
+// =================================================================================================
+// =================================================================================================
   linkOption: {
+    // =============================================================================================
+    // Uses app.prompt to update project tags (deprecated)
+    // =============================================================================================
+/*
     "Update Project Tags": async function(app, link) {
       const plugin = this;
 
@@ -254,14 +289,20 @@ generateUniqueNoteIdTag: async function(app, note) {
       // await app.alert(`Tags updated:\n- ${domainTag}\n- ${statusTag}`);
     }
   }, // End Update Project Tags
+*/
 
-  // ==================== Note Actions ====================
+// =================================================================================================
+// =================================================================================================
+//                                     Note Actions
+// =================================================================================================
+// =================================================================================================
   noteOption: {
 
-    /* ################## Find Related Items ####################
-    # Populates the current note with related tasks, project links,
-    # and reference notes
-    ####################################################### */
+    // =============================================================================================
+    // Find Related Items
+    // Populates the current note with related tasks, project links, and reference notes
+    // =============================================================================================
+/*
     "Find Related Items": async function(app, noteUUID) {
       const plugin = this;
       const taskCache = {}; //used to cache tasks to speed up processing
@@ -338,11 +379,13 @@ generateUniqueNoteIdTag: async function(app, note) {
         section: { heading: { text: "Related References" } }
       });
     }, // End "Find Related Items"
+*/
 
-    /* ################## Refresh Relevant Tasks ####################
-    # Builds a prioritized list of upcoming or high-priority tasks in a Daily Jot note
-    # 
-    ####################################################### */
+    // =============================================================================================
+    // Refresh Relevant Tasks
+    // Builds a prioritized list of upcoming or high-priority tasks in a Daily Jot note
+    // =============================================================================================
+/*
     "Refresh Relevant Tasks": async function(app, noteUUID) {
       const plugin = this;
       const taskCache = {}; //used to cache tasks to speed up processing
@@ -440,12 +483,15 @@ generateUniqueNoteIdTag: async function(app, note) {
         { section: { heading: { text: "Relevant Tasks" } } }
       );
     }, // End "Refresh Relevant Tasks"
+*/
 
-    /* ################## Update Lists ####################
-    # This function will automate the refreshing of many different GTD related lists
-    # It uses one-pass loading of all notes, bracketed titles to identify domains,
-    # and bracketed headers to dynamically populate sections in list notes.
-    ####################################################### */
+    // =============================================================================================
+    // Update Lists
+    // This function will automate the refreshing of many different GTD related lists.
+    // It uses one-pass loading of all notes, bracketed titles to identify domains, and 
+    // bracketed headers to dynamically populate sections in list notes.
+    // =============================================================================================
+/*
     "Update Lists": async function(app, noteUUID) {
       const plugin = this;
       const taskCache = {}; //used to cache tasks to speed up processing
@@ -546,14 +592,6 @@ generateUniqueNoteIdTag: async function(app, note) {
               // Get tasks from the project note itself
               const projectTasks = await app.getNoteTasks({ uuid: project.uuid });
 
-/*              
-              if (project.title === "Box to OneDrive migration (408659)") {
-                await app.alert(
-                  `Tasks for ${project.title}\nTask count: ${projectTasks.length}\n` +
-                  projectTasks.map(t => `${t.completed ? "✔️" : "❌"} ${t.content}`).join("\n")
-                );
-              }
-*/
               // Get all tasks from notes tagged with the domain
               const domainTasks = await plugin.getAllTasksForTag(app, `d/${domain}`, taskCache);
 
@@ -618,15 +656,17 @@ generateUniqueNoteIdTag: async function(app, note) {
       }
       await app.alert("All lists updated!");
     }, // End Update Lists
+*/
 
-    /* ################## Update Current List ####################
-    # This function updates only the current list note.
-    # It applies the same logic as Update Lists:
-    # - Uses [domain] in the title to scope notes
-    # - Uses [subtag] in section headings to filter content
-    # - Projects include tasks; others do not
-    # - Uses getAllowedTagPrefixesForNoteTitle to determine which tags apply
-    ############################################################## */
+    // =============================================================================================
+    // Update Current List
+    // This function updates only the current list note. It applies the same logic as Update Lists:
+    // - Uses [domain] in the title to scope notes
+    // - Uses [subtag] in section headings to filter content
+    // - Projects include tasks; others do not
+    // - Uses getAllowedTagPrefixesForNoteTitle to determine which tags apply
+    // =============================================================================================
+/*
     "Update Current List": async function(app, noteUUID) {
       const plugin = this;
       const taskCache = {}; //used to cache tasks to speed up processing
@@ -753,9 +793,13 @@ generateUniqueNoteIdTag: async function(app, note) {
       }
       // await app.alert("Current list updated!");
     }, // End Update Current List
+*/
 
+    // =============================================================================================
+    // Testing
+    // This function is a placeholder for unit testing global functions or any other testing
+    // =============================================================================================
     "Testing": async function(app, noteUUID) {
-      // This function is for unit testing global functions or any other testing
 
     
 
