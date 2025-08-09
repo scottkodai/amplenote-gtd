@@ -608,6 +608,11 @@
     const noteIdValue = noteIdTag.split("/")[1]; // the actual ID portion
 
     // Find all notes with a relationship to this note-id
+// ##################################################################################
+// ----------------------------------------------------------------------------------    
+// TODO: check to make sure this works. I'm not sure you can use wildcards in a tag name!!
+// ----------------------------------------------------------------------------------
+// ##################################################################################
     const allMatches = await app.filterNotes({ tag: `r/*/${noteIdValue}` });
 
     // Filter down to project notes only
