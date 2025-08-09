@@ -172,6 +172,50 @@
   }, // end categorizeProjectNotes
 
   // ===============================================================================================
+  // Returns an array of parent notes for the given noteUUID.
+  // Looks for r/parent/* tags on the note and fetches each parent note.
+  // ===============================================================================================
+  getParentNotes: async function (app, noteUUID) {
+    const note = await app.notes.find(noteUUID);
+    if (!note) throw new Error("Note not found.");
+
+    const parentTags = note.tags.filter(t => t.startsWith("r/parent/"));
+    if (parentTags.length === 0) return [];
+
+    // Extract note-id portion
+    const parentIds = parentTags.map(t => t.split("/")[2]);
+
+    // Find notes with matching note-id/* tags
+    const parents = [];
+    for (const pid of parentIds) {
+      const matches = await app.filterNotes({ tag: `note-id/${pid}` });
+      if (matches.length > 0) parents.push(matches[0]);
+    }
+    return parents;
+  }, // end getParentNotes
+
+  // ===============================================================================================
+  // Returns an array of child notes for the given noteUUID.
+  // Looks for r/child/* tags on the note and fetches each child note.
+  // ===============================================================================================
+  getChildNotes: async function (app, noteUUID) {
+    const note = await app.notes.find(noteUUID);
+    if (!note) throw new Error("Note not found.");
+
+    const childTags = note.tags.filter(t => t.startsWith("r/child/"));
+    if (childTags.length === 0) return [];
+
+    const childIds = childTags.map(t => t.split("/")[2]);
+
+    const children = [];
+    for (const cid of childIds) {
+      const matches = await app.filterNotes({ tag: `note-id/${cid}` });
+      if (matches.length > 0) children.push(matches[0]);
+    }
+    return children;
+  }, // end getChildNotes
+
+  // ===============================================================================================
   // Establishes a parent/child relationship between two notes (intented for project notes).
   // Ensures both notes have a note-id tag, then adds:
   //   - r/child/<parent-note-id> to the child note
@@ -852,38 +896,21 @@
     "Testing": async function(app, noteUUID) {
     const plugin = this;
 
-    // Prompt for the parent note using Amplenote's search
-    const result = await app.prompt("Select the parent note:", {
-        inputs: [
-          {
-            label: "Parent Note",
-            type: "note",
-          }
-        ]
-      });
-      
-      // await app.alert("Returned value: " + JSON.stringify(result));
-      
-      // `result` will be null if user cancels
-        if (!result) return;
+    // Get parent notes
+    const parents = await this.getParentNotes(app, noteUUID);
+    const parentList = parents.length
+      ? parents.map(n => `- **${n.name}**`).join("\n")
+      : "_(No parents)_";
 
-        // For a single input, result is either the value or an array.
-        // For type:"note", it returns a note handle object { noteUUID, ... }
-        const parentHandle = Array.isArray(result) ? result[0] : result;
+    // Get child notes
+    const children = await this.getChildNotes(app, noteUUID);
+    const childList = children.length
+      ? children.map(n => `- **${n.name}**`).join("\n")
+      : "_(No children)_";
 
-        if (!parentHandle || !parentHandle.uuid) {
-          await app.alert("No note selected.");
-          return;
-        }
-
-      // await app.alert("Parent UUID: " + JSON.stringify(parentHandle.uuid));
-
-      try {
-        await plugin.setParentChildRelationship(app, noteUUID, parentHandle.uuid);
-        await app.alert("Parent/child relationship established.");
-      } catch (err) {
-        await app.alert(`Error: ${err.message}`);
-      }
+    // Show results in markdown
+    const md = `**Parents:**\n${parentList}\n\n**Children:**\n${childList}`;
+    await app.alert(md);
     } // End Testing
   }
 }
