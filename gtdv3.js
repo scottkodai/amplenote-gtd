@@ -372,7 +372,51 @@
   // Called from: 
   // ===============================================================================================
   updateRelatedProjectsSection: async function(app, noteUUID) {
-    return { updated: false, count: 0 };
+    const sectionHeading = "Related Projects";
+
+    // Get all sections for the note
+    const sections = await app.getNoteSections({ uuid: noteUUID });
+    const targetSection = sections.find(s =>
+      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+    );
+    if (!targetSection) return { updated: false, count: 0 };
+
+    // Ensure the current note has a note-id
+    const note = await app.notes.find(noteUUID);
+    const noteIdTag = await this.getNoteIdTag(app, note); // returns existing or creates new
+    const noteIdValue = noteIdTag.split("/")[1]; // the actual ID portion
+
+    // Find all notes with a relationship to this note-id
+    const allMatches = await app.filterNotes({ tag: `r/*/${noteIdValue}` });
+
+    // Filter down to project notes only
+    const projectMatches = allMatches.filter(n =>
+      n.tags.some(t => t.startsWith("project/"))
+    );
+
+    // Remove matches that are parent/child relationships
+    const filteredMatches = projectMatches.filter(n =>
+      !n.tags.some(t =>
+        t.startsWith(`r/parent/${noteIdValue}`) ||
+        t.startsWith(`r/child/${noteIdValue}`)
+      )
+    );
+
+    // Normalize and sort
+    const relatedProjects = filteredMatches.map(n => this.normalizeNoteHandle(n));
+    relatedProjects.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Build markdown list
+    const projectList = relatedProjects.length
+      ? relatedProjects.map(n => `- [${n.name}](${n.url})`).join("\n")
+      : "_(No related projects)_";
+
+    // Replace section content
+    await app.replaceNoteContent(noteUUID, projectList, {
+      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+    });
+
+    return { updated: true, count: relatedProjects.length };
   }, // end updateRelatedProjectsSection
 
   // ===============================================================================================
