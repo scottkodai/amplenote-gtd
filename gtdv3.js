@@ -897,6 +897,32 @@
     "Testing": async function(app, noteUUID) {
     const plugin = this;
 
+    const result = await app.prompt("Select the parent note:", {
+        inputs: [
+          {
+            label: "Parent Note",
+            type: "note"
+          }
+        ]
+      });
+
+      if (!result) return; // user cancelled
+
+      // When only one input is given, result will be the value itself (not an array)
+      const parentHandle = result;
+
+      if (!parentHandle || !parentHandle.uuid) {
+        await app.alert("No note selected.");
+        return;
+      }
+
+      try {
+        await plugin.setParentChildRelationship(app, noteUUID, parentHandle.uuid);
+        await app.alert("Parent/child relationship established.");
+      } catch (err) {
+        await app.alert(`Error: ${err.message}`);
+      }
+
     // Get parent notes
     const parents = await this.getParentNotes(app, noteUUID);
     const parentList = parents.length
