@@ -850,20 +850,29 @@
     // This function is a placeholder for unit testing global functions or any other testing
     // =============================================================================================
     "Testing": async function(app, noteUUID) {
-      const plugin = this;
+    const plugin = this;
 
-      // Prompt for the parent note using Amplenote's search
-      const parentUUID = await app.prompt("Select the parent note:", {
-        type: "note"
+    // Prompt for the parent note using Amplenote's search
+    const result = await app.prompt("Select the parent note:", {
+        inputs: [
+          {
+            label: "Parent Note",
+            type: "note",
+            name: "parent"
+          }
+        ]
       });
-      if (!parentUUID) return; // cancelled
+      if (!result || !result.parent) return; // cancelled
 
+      await app.alert("Returned value: " + JSON.stringify(result));
+/*
       try {
-        await plugin.setParentChildRelationship(app, noteUUID, parentUUID);
+        await plugin.setParentChildRelationship(app, noteUUID, result.parent);
         await app.alert("Parent/child relationship established.");
       } catch (err) {
         await app.alert(`Error: ${err.message}`);
       }
+        */
     } // End Testing
   }
 }
