@@ -898,8 +898,7 @@
       const sectionHeading = "Child Projects";
 
       // Get sections for the note
-      const note = await app.notes.find(noteUUID);
-      const sections = await app.getNoteSections(note);
+      const sections = await app.getNoteSections({uuid: noteUUID});
 
       // Find the first section with the matching heading (case-insensitive)
       const targetSection = sections.find(s => 
