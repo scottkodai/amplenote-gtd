@@ -377,7 +377,7 @@
     const note = await app.notes.find(noteUUID);
 
     // 3. Get all open tasks from the current note
-    const ownTasks = await app.getNoteTasks(note);
+    const ownTasks = await app.getNoteTasks({uuid: noteUUID});
 
     // 4. Find other notes that reference this note (by UUID or title link)
     const backlinks = await app.filterNotes({ text: noteUUID }); // UUID search
@@ -390,7 +390,7 @@
     // 5. From those notes, get tasks referencing this note
     let referencedTasks = [];
     for (const bn of backlinkNotes) {
-      const tasks = await app.getNoteTasks(bn);
+      const tasks = await app.getNoteTasks({uuid: bn.uuid});
       const matchingTasks = tasks.filter(t =>
         t.content.includes(note.name) || t.content.includes(noteUUID)
       );
