@@ -891,6 +891,46 @@
 */
 
     // =============================================================================================
+    // Update Child Projects
+    // This function is a placeholder for testing parent child relationships
+    // =============================================================================================
+    "Update Child Projects": async function(app, noteUUID) {
+      const sectionHeading = "Child Projects";
+
+      // Get sections for the note
+      const note = await app.notes.find(noteUUID);
+      const sections = await app.getNoteSections(note);
+
+      // Find the first section with the matching heading (case-insensitive)
+      const targetSection = sections.find(s => 
+        s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+      );
+
+      if (!targetSection) {
+        await app.alert(`Section "${sectionHeading}" not found — no changes made.`);
+        return;
+      }
+
+      // Get the child notes
+      const children = await this.getChildNotes(app, noteUUID);
+
+      // Sort alphabetically by name
+      children.sort((a, b) => a.name.localeCompare(b.name));
+
+      // Build markdown list
+      const childList = children.length
+        ? children.map(n => `- [[${n.name}]]`).join("\n")
+        : "_(No child projects)_";
+
+      // Replace section content
+      await app.replaceNoteContent(noteUUID, childList, {
+        section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+      });
+
+      await app.alert(`Updated "${sectionHeading}" section with ${children.length} child project(s).`);
+    }, // end Update Child Projects
+
+    // =============================================================================================
     // Set Parent
     // This function is a placeholder for testing parent child relationships
     // =============================================================================================
