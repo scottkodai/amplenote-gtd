@@ -368,6 +368,45 @@
   }, // end updateRelatedTasksSection
 
   // ===============================================================================================
+  // Updates any existing Related Vendors section with links to all related vendors
+  // Called from: 
+  // ===============================================================================================
+  updateRelatedVendorsSection: async function(app, noteUUID) {
+    const sectionHeading = "Related Vendors";
+
+    // Get all sections for the note
+    const sections = await app.getNoteSections({ uuid: noteUUID });
+    const targetSection = sections.find(s =>
+      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+    );
+    if (!targetSection) return { updated: false, count: 0 };
+
+    // Ensure the current note has a note-id
+    const note = await app.notes.find(noteUUID);
+    const noteIdTag = await this.getNoteIdTag(app, note);
+    const noteIdValue = noteIdTag.split("/")[1];
+
+    // Find all vendor notes that reference this note's ID
+    const vendorMatches = await app.filterNotes({ tag: `r/vendor/${noteIdValue}` });
+
+    // Normalize and sort
+    const relatedVendors = vendorMatches.map(n => this.normalizeNoteHandle(n));
+    relatedVendors.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Build markdown list
+    const vendorList = relatedVendors.length
+      ? relatedVendors.map(n => `- [${n.name}](${n.url})`).join("\n")
+      : "_(No related vendors)_";
+
+    // Replace section content
+    await app.replaceNoteContent(noteUUID, vendorList, {
+      section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
+    });
+
+    return { updated: true, count: relatedVendors.length };
+  }, // end updateRelatedVendorsSection
+
+  // ===============================================================================================
   // Updates any existing Related Projects section with links to all related projects
   // Called from: 
   // ===============================================================================================
@@ -688,6 +727,7 @@
         { name: "Related People", fn: this.updateRelatedPeopleSection },
         { name: "Related References", fn: this.updateRelatedReferencesSection },
         { name: "Related Software", fn: this.updateRelatedSoftwareSection },
+        { name: "Related Vendors", fn: this.updateRelatedVendorsSection },
         { name: "Parent Projects", fn: this.updateParentProjectsSection },
         { name: "Child Projects", fn: this.updateChildProjectsSection }
       ];
