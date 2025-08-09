@@ -891,10 +891,10 @@
 */
 
     // =============================================================================================
-    // Testing
-    // This function is a placeholder for unit testing global functions or any other testing
+    // Set Parent
+    // This function is a placeholder for testing parent child relationships
     // =============================================================================================
-    "Testing": async function(app, noteUUID) {
+    "Set Parent": async function(app, noteUUID) {
     const plugin = this;
 
     const result = await app.prompt("Select the parent note:", {
@@ -922,6 +922,14 @@
       } catch (err) {
         await app.alert(`Error: ${err.message}`);
       }
+    }, // End Set Parent
+
+    // =============================================================================================
+    // Testing
+    // This function is a placeholder for unit testing global functions or any other testing
+    // =============================================================================================
+    "Testing": async function(app, noteUUID) {
+    const plugin = this;
 
     // Get parent notes
     const parents = await this.getParentNotes(app, noteUUID);
