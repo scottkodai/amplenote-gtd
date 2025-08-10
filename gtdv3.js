@@ -1077,11 +1077,11 @@
     // Convert project tags to note-id
     // This function is temporary code to convert existing relationships to the new note-id style
     // =============================================================================================
-
     "Convert project tags to note-id": async function (app, noteUUID) {
       const plugin = this;
-
       const results = [];
+      let updatedCount = 0;
+      let errorCount = 0;
 
       // Step 1: Get all project notes
       const projectNotes = await app.filterNotes({ tag: "project" });
@@ -1097,12 +1097,10 @@
           !/^\d+$/.test(tag.split("/")[2]) // exclude note-id form (numeric only)
         );
 
-        // Step 3a: Limit to just r/people/skodai for this dry run
-        const skodaiTags = oldPeopleTags.filter(tag => tag === "r/people/skodai");
-        if (skodaiTags.length === 0) continue;
+        if (oldPeopleTags.length === 0) continue;
 
-        for (const oldTag of skodaiTags) {
-          const username = oldTag.split("/")[2]; // "skodai"
+        for (const oldTag of oldPeopleTags) {
+          const username = oldTag.split("/")[2];
 
           // Step 4: Find matching People note by [username] in title
           const matchingPerson = peopleNotes.find(p => {
@@ -1117,13 +1115,13 @@
               oldTag,
               error: `No matching people note found for username '${username}'`
             });
+            errorCount++;
             continue;
           }
 
           // Step 5: Get (and create if missing) the note-id for the People note
           const personNoteObj = await app.notes.find(matchingPerson.uuid);
           const noteIdTag = await plugin.getNoteIdTag(app, personNoteObj);
-
 
           // Step 6: Actually update the tags on the project note
           const projectNoteObj = await app.notes.find(proj.uuid);
@@ -1134,7 +1132,7 @@
           // Add the new r/people/<note-id> tag
           await projectNoteObj.addTag(`r/people/${noteIdTag.replace("note-id/", "")}`);
 
-          // Optional: log confirmation for this project
+          updatedCount++;
           results.push({
             projectNote: proj.name,
             updatedFrom: oldTag,
@@ -1142,8 +1140,19 @@
           });
         }
       }
-    }, // end Convert project tags to note-id
 
+      // Summary alert
+      await app.alert(
+        `✅ Conversion complete\n` +
+        `Updated: ${updatedCount} relationships\n` +
+        `Errors: ${errorCount}\n\n` +
+        results.map(r =>
+          r.error
+            ? `${r.projectNote}: ${r.oldTag} ❌ ${r.error}`
+            : `${r.projectNote}: ${r.updatedFrom} → ${r.updatedTo}`
+        ).join("\n")
+      );
+    }, // end Convert project tags to note-id
 
     // =============================================================================================
     // Testing
