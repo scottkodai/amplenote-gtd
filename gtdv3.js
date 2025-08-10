@@ -1019,26 +1019,22 @@
           const noteIdTag = await plugin.getNoteIdTag(app, personNoteObj);
 
 
-          // Step 6: Add to results (dry run: no changes made)
+          // Step 6: Actually update the tags on the project note
+          const projectNoteObj = await app.notes.find(proj.uuid);
+
+          // Remove the old r/people/<username> tag
+          await projectNoteObj.removeTag(oldTag);
+
+          // Add the new r/people/<note-id> tag
+          await projectNoteObj.addTag(`r/people/${noteIdTag.replace("note-id/", "")}`);
+
+          // Optional: log confirmation for this project
           results.push({
             projectNote: proj.name,
-            projectUUID: proj.uuid,
-            oldTag,
-            newTag: `r/people/${noteIdTag.replace("note-id/", "")}`,
-            personNote: matchingPerson.name,
-            personUUID: matchingPerson.uuid
+            updatedFrom: oldTag,
+            updatedTo: `r/people/${noteIdTag.replace("note-id/", "")}`
           });
         }
-      }
-
-      // Step 7: Output results for review
-      if (results.length === 0) {
-        await app.alert("No matching r/people/skodai tags found on project notes.");
-      } else {
-        await app.alert(
-          "Dry Run Results:\n" + JSON.stringify(results, null, 2),
-          { scrollToEnd: true }
-        );
       }
     }, // end Convert project tags to note-id
 
