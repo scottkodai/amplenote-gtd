@@ -607,13 +607,13 @@
     const noteIdTag = await this.getNoteIdTag(app, note); // returns existing or creates new
     const noteIdValue = noteIdTag.split("/")[1]; // the actual ID portion
 
-    // Find all notes with a relationship to this note-id
-// ##################################################################################
-// ----------------------------------------------------------------------------------    
-// TODO: check to make sure this works. I'm not sure you can use wildcards in a tag name!!
-// ----------------------------------------------------------------------------------
-// ##################################################################################
-    const allMatches = await app.filterNotes({ tag: `r/*/${noteIdValue}` });
+    // Find all notes that have *any* r/ tag
+    const rTaggedNotes = await app.filterNotes({ tag: "r" });
+
+    // Filter to only those whose tag ends with /<noteIdValue>
+    const allMatches = rTaggedNotes.filter(n =>
+      n.tags.some(t => t.startsWith("r/") && t.endsWith(`/${noteIdValue}`))
+    );
 
     // Filter down to project notes only
     const projectMatches = allMatches.filter(n =>
