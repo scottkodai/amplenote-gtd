@@ -1015,7 +1015,9 @@
           }
 
           // Step 5: Get (and create if missing) the note-id for the People note
-          const noteIdTag = await plugin.getNoteIdTag(app, matchingPerson);
+          const personNoteObj = await app.notes.find(matchingPerson.uuid);
+          const noteIdTag = await plugin.getNoteIdTag(app, personNoteObj);
+
 
           // Step 6: Add to results (dry run: no changes made)
           results.push({
