@@ -968,6 +968,80 @@
     }, // End Set Parent
 
     // =============================================================================================
+    // Convert project tags to note-id
+    // This function is temporary code to convert existing relationships to the new note-id style
+    // =============================================================================================
+
+    "Convert project tags to note-id": async function (app, noteUUID) {
+      const plugin = this;
+
+      const results = [];
+
+      // Step 1: Get all project notes
+      const projectNotes = await app.filterNotes({ tag: "project" });
+
+      // Step 2: Get all people notes (tagged reference/people/*)
+      const peopleNotes = await app.filterNotes({ tag: "reference/people" });
+
+      // Step 3: Iterate over project notes
+      for (const proj of projectNotes) {
+        // Look for old-style r/people tags on this project
+        const oldPeopleTags = proj.tags.filter(tag =>
+          tag.startsWith("r/people/") &&
+          !/^\d+$/.test(tag.split("/")[2]) // exclude note-id form (numeric only)
+        );
+
+        // Step 3a: Limit to just r/people/skodai for this dry run
+        const skodaiTags = oldPeopleTags.filter(tag => tag === "r/people/skodai");
+        if (skodaiTags.length === 0) continue;
+
+        for (const oldTag of skodaiTags) {
+          const username = oldTag.split("/")[2]; // "skodai"
+
+          // Step 4: Find matching People note by [username] in title
+          const matchingPerson = peopleNotes.find(p => {
+            const bracketText = plugin.extractBracketText(p.name);
+            return bracketText === username;
+          });
+
+          if (!matchingPerson) {
+            results.push({
+              projectNote: proj.name,
+              projectUUID: proj.uuid,
+              oldTag,
+              error: `No matching people note found for username '${username}'`
+            });
+            continue;
+          }
+
+          // Step 5: Get (and create if missing) the note-id for the People note
+          const noteIdTag = await plugin.getNoteIdTag(app, matchingPerson);
+
+          // Step 6: Add to results (dry run: no changes made)
+          results.push({
+            projectNote: proj.name,
+            projectUUID: proj.uuid,
+            oldTag,
+            newTag: `r/people/${noteIdTag.replace("note-id/", "")}`,
+            personNote: matchingPerson.name,
+            personUUID: matchingPerson.uuid
+          });
+        }
+      }
+
+      // Step 7: Output results for review
+      if (results.length === 0) {
+        await app.alert("No matching r/people/skodai tags found on project notes.");
+      } else {
+        await app.alert(
+          "Dry Run Results:\n" + JSON.stringify(results, null, 2),
+          { scrollToEnd: true }
+        );
+      }
+    }, // end Convert project tags to note-id
+
+
+    // =============================================================================================
     // Testing
     // This function is a placeholder for unit testing global functions or any other testing
     // =============================================================================================
