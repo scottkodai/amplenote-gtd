@@ -448,6 +448,102 @@
     }
   }, // end createRelationship
 
+  // ===============================================================================================
+  // Runs the tagging cleanup process and updates the "Tagging Cleanup" section in the Inbox note
+  // ===============================================================================================
+  taggingCleanup: async function (app) {
+    const plugin = this;
+    const cleanupResults = [];
+
+    // Helper to normalize, sort, and link notes
+    const formatNoteList = (notes) => {
+      return notes
+        .map(n => plugin.normalizeNoteHandle(n))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(handle => `    - [${handle.name}](${handle.url})`)
+        .join("\n");
+    };
+
+    // A: Missing critical tag
+    let allNotes = await app.filterNotes({ tag: "^archive,^exclude" });
+    const criticalPrefixes = ["daily-jots", "list/", "reference/", "system", "project/"];
+    const missingCritical = allNotes.filter(n =>
+      !n.tags.some(tag => criticalPrefixes.some(prefix => tag.startsWith(prefix)))
+    );
+    if (missingCritical.length > 0) {
+      cleanupResults.push({ reason: "Missing critical tag", notes: missingCritical });
+    }
+
+    // B: Active project notes with no r/people tag
+    const projectStatuses = ["project/active", "project/focus", "project/on-hold", "project/tracking"];
+    let missingPeople = [];
+    for (const status of projectStatuses) {
+      const projects = await plugin.getFilteredNotes(app, status);
+      missingPeople.push(...projects.filter(n => !n.tags.some(tag => tag.startsWith("r/people/"))));
+    }
+    if (missingPeople.length > 0) {
+      cleanupResults.push({ reason: "Active project notes with no r/people tag", notes: missingPeople });
+    }
+
+    // C: Multiple domain tags
+    const notesWithMultipleDomains = allNotes.filter(n => n.tags.filter(t => t.startsWith("d/")).length > 1);
+    if (notesWithMultipleDomains.length > 0) {
+      cleanupResults.push({ reason: "Multiple domain tags", notes: notesWithMultipleDomains });
+    }
+
+    // D: Multiple project status tags
+    const notesWithMultipleProjectStatus = allNotes.filter(n => n.tags.filter(t => t.startsWith("project/")).length > 1);
+    if (notesWithMultipleProjectStatus.length > 0) {
+      cleanupResults.push({ reason: "Multiple project status tags", notes: notesWithMultipleProjectStatus });
+    }
+
+    // E: Parent projects with no child projects
+    const parentProjects = allNotes.filter(n => n.tags.some(t => t.startsWith("r/parent/")));
+    const noChildren = [];
+    for (const parent of parentProjects) {
+      const children = await plugin.getChildNotes(app, parent.uuid);
+      if (children.length === 0) noChildren.push(parent);
+    }
+    if (noChildren.length > 0) {
+      cleanupResults.push({ reason: "Parent projects with no child projects", notes: noChildren });
+    }
+
+    // F: Child projects with no parent project
+    const childProjects = allNotes.filter(n => n.tags.some(t => t.startsWith("r/child/")));
+    const noParent = [];
+    for (const child of childProjects) {
+      const parents = await plugin.getParentNotes(app, child.uuid);
+      if (parents.length === 0) noParent.push(child);
+    }
+    if (noParent.length > 0) {
+      cleanupResults.push({ reason: "Child projects with no parent project", notes: noParent });
+    }
+
+    // Build Markdown for the Tagging Cleanup section
+    let md = "";
+    if (cleanupResults.length === 0) {
+      md = "_No cleanup issues found_";
+    } else {
+      for (const group of cleanupResults) {
+        md += `- ${group.reason}\n`;
+        md += formatNoteList(group.notes) + "\n";
+      }
+    }
+
+    // Find the Inbox note and update the Tagging Cleanup section
+    const inboxNotes = await app.filterNotes({ title: "Inbox" });
+    if (inboxNotes.length === 0) {
+      await app.alert("❌ Inbox note not found.");
+      return;
+    }
+    const inbox = inboxNotes[0];
+    await app.replaceNoteContent(inbox.uuid, md, {
+      section: { heading: { text: "Tagging Cleanup" } }
+    });
+
+    await app.alert("✅ Tagging Cleanup section updated in Inbox.");
+  }, // end taggingCleanup
+
 // =================================================================================================
 // =================================================================================================
 //                                     List Update functions
@@ -1121,6 +1217,12 @@
       await app.alert(`Note ID for "${note.name}":\n${noteIdTag.replace("note-id/", "")}`);
     },  // end Get note-id
 
+    // ===============================================================================================
+    // Note option wrapper to run Tagging Cleanup manually
+    // ===============================================================================================
+      "Run Tagging Cleanup": async function (app, noteUUID) {
+        await this.taggingCleanup(app);
+      }, // End Run Tagging Cleanup
 
     // =============================================================================================
     // Testing
