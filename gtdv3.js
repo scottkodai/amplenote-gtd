@@ -595,7 +595,6 @@
   updateRelatedProjectsSection: async function(app, noteUUID) {
     const sectionHeading = "Related Projects";
 
-    // Status order & display names
     const projectStatuses = [
       { tag: "project/focus", label: "Focus Projects" },
       { tag: "project/active", label: "Active Projects" },
@@ -630,7 +629,7 @@
       n.tags.some(t => t.startsWith("project/"))
     );
 
-    // Remove parent/child rels
+    // Remove matches that are parent/child relationships to THIS note
     const filteredMatches = projectMatches.filter(n =>
       !n.tags.some(t =>
         t.startsWith(`r/parent/${noteIdValue}`) ||
@@ -648,20 +647,51 @@
       const handle = this.normalizeNoteHandle(proj);
       const statusTag = proj.tags.find(t => t.startsWith("project/"));
       if (grouped[statusTag]) {
-        grouped[statusTag].push(handle);
+        grouped[statusTag].push({ handle, uuid: proj.uuid });
       }
     }
+
+    // Track which UUIDs we've already displayed to avoid duplicates
+    const displayed = new Set();
+
+    // Recursive function to get children and build nested markdown
+    const getChildMarkdown = async (parentUUID, indentLevel) => {
+      const parentNote = await app.notes.find(parentUUID);
+      const parentNoteIdTag = await this.getNoteIdTag(app, parentNote);
+      const parentNoteIdValue = parentNoteIdTag.split("/")[1];
+
+      const related = rTaggedNotes.filter(n =>
+        n.tags.includes(`r/parent/${parentNoteIdValue}`)
+      );
+
+      // Only keep project notes
+      const children = related
+        .filter(n => n.tags.some(t => t.startsWith("project/")))
+        .map(n => ({ handle: this.normalizeNoteHandle(n), uuid: n.uuid }))
+        .sort((a, b) => a.handle.name.localeCompare(b.handle.name));
+
+      let md = "";
+      for (const child of children) {
+        if (displayed.has(child.uuid)) continue;
+        displayed.add(child.uuid);
+        md += `${"    ".repeat(indentLevel)}- [${child.handle.name}](${child.handle.url})\n\n`;
+        md += await getChildMarkdown(child.uuid, indentLevel + 1); // recurse for grandchildren
+      }
+      return md;
+    };
 
     // Build markdown
     let md = "";
     for (const status of projectStatuses) {
       md += `- ${status.label}\n\n`;
       if (grouped[status.tag].length > 0) {
-        grouped[status.tag]
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .forEach(proj => {
-            md += `    - [${proj.name}](${proj.url}) \n\n`;
-          });
+        grouped[status.tag].sort((a, b) => a.handle.name.localeCompare(b.handle.name));
+        for (const { handle, uuid } of grouped[status.tag]) {
+          if (displayed.has(uuid)) continue; // skip if already shown as a child
+          displayed.add(uuid);
+          md += `    - [${handle.name}](${handle.url})\n\n`;
+          md += await getChildMarkdown(uuid, 2);
+        }
       } else {
         md += `    - *No matching projects*\n\n`;
       }
@@ -672,7 +702,7 @@
       section: { heading: { text: sectionHeading } }
     });
 
-    const totalCount = Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0);
+    const totalCount = displayed.size;
     return { updated: true, count: totalCount };
   }, // end updateRelatedProjectsSection
 
