@@ -522,12 +522,19 @@
           break;
       }
 
-      // Get matching notes, adding single domain tag if present
-      let matchingNotes;
+      // Get all notes with the base tag
+      let matchingNotes = await app.filterNotes({ tag: baseTag });
+
+      // Apply domain filter: include notes with matching domain OR no domain tag
       if (domainTags.length > 0) {
-        matchingNotes = await app.filterNotes({ tag: `${baseTag},${domainTags[0]}` });
-      } else {
-        matchingNotes = await app.filterNotes({ tag: baseTag });
+        const domainTag = domainTags[0];
+        matchingNotes = matchingNotes.filter(n => {
+          const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
+          return (
+            noteDomainTags.length === 0 || // no domain tag → include
+            noteDomainTags.includes(domainTag) // matches current domain → include
+          );
+        });
       }
 
       // Build flat list with children
@@ -697,14 +704,16 @@
     const noteIdTag = await this.getNoteIdTag(app, note);
     const noteIdValue = noteIdTag.split("/")[1];
 
-    // Find vendor matches, adding domain filter if present
-    let filterOptions;
+    // Find vendor matches (unfiltered first)
+    let vendorMatches = await app.filterNotes({ tag: `r/vendor/${noteIdValue}` });
+
+    // 🔹 Domain filtering (include if no domain tags OR matches current domain)
     if (domainTags.length > 0) {
-      filterOptions = { tag: `r/vendor/${noteIdValue},${domainTags[0]}` };
-    } else {
-      filterOptions = { tag: `r/vendor/${noteIdValue}` };
+      vendorMatches = vendorMatches.filter(n => {
+        const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
+        return noteDomainTags.length === 0 || domainTags.some(dt => noteDomainTags.includes(dt));
+      });
     }
-    const vendorMatches = await app.filterNotes(filterOptions);
 
     const relatedVendors = vendorMatches.map(n => this.normalizeNoteHandle(n));
     relatedVendors.sort((a, b) => a.name.localeCompare(b.name));
@@ -737,14 +746,16 @@
     const noteIdTag = await this.getNoteIdTag(app, note);
     const noteIdValue = noteIdTag.split("/")[1];
 
-    // Get all notes tagged with "r" and optionally filter by domain
-    let filterOptions;
+    // Get all notes tagged with "r" (unfiltered first)
+    let rTaggedNotes = await app.filterNotes({ tag: "r" });
+
+    // 🔹 Domain filtering (include if no domain tags OR matches current domain)
     if (domainTags.length > 0) {
-      filterOptions = { tag: `r,${domainTags[0]}` }; // AND logic: must have "r" and the domain tag
-    } else {
-      filterOptions = { tag: "r" };
+      rTaggedNotes = rTaggedNotes.filter(n => {
+        const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
+        return noteDomainTags.length === 0 || domainTags.some(dt => noteDomainTags.includes(dt));
+      });
     }
-    let rTaggedNotes = await app.filterNotes(filterOptions);
 
     const allMatches = rTaggedNotes.filter(n =>
       n.tags.some(t => t.startsWith("r/") && t.endsWith(`/${noteIdValue}`))
@@ -799,15 +810,17 @@
     for (const tag of peopleTags) {
       const noteId = tag.split("/")[2];
 
-      // Build filter options with AND logic if a domain is present
-      let filterOptions;
+      // Get all matches for this note-id (unfiltered first)
+      let matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+
+      // 🔹 Domain filtering (include if no domain tags OR matches current domain)
       if (domainTags.length > 0) {
-        filterOptions = { tag: `note-id/${noteId},${domainTags[0]}` };
-      } else {
-        filterOptions = { tag: `note-id/${noteId}` };
+        matches = matches.filter(n => {
+          const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
+          return noteDomainTags.length === 0 || domainTags.some(dt => noteDomainTags.includes(dt));
+        });
       }
 
-      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedPeople.push(this.normalizeNoteHandle(matches[0]));
       }
@@ -852,15 +865,17 @@
     for (const tag of referenceTags) {
       const noteId = tag.split("/")[2];
 
-      // Build filter options with AND logic if a domain is present
-      let filterOptions;
+      // Get all matches for this note-id (unfiltered first)
+      let matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+
+      // 🔹 Domain filtering (include if no domain tags OR matches current domain)
       if (domainTags.length > 0) {
-        filterOptions = { tag: `note-id/${noteId},${domainTags[0]}` };
-      } else {
-        filterOptions = { tag: `note-id/${noteId}` };
+        matches = matches.filter(n => {
+          const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
+          return noteDomainTags.length === 0 || domainTags.some(dt => noteDomainTags.includes(dt));
+        });
       }
 
-      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedRefs.push(this.normalizeNoteHandle(matches[0]));
       }
@@ -905,15 +920,17 @@
     for (const tag of softwareTags) {
       const noteId = tag.split("/")[2];
 
-      // Build filter options with AND logic if a domain is present
-      let filterOptions;
+      // Get all matches for this note-id (unfiltered first)
+      let matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+
+      // 🔹 Domain filtering (include if no domain tags OR matches current domain)
       if (domainTags.length > 0) {
-        filterOptions = { tag: `note-id/${noteId},${domainTags[0]}` };
-      } else {
-        filterOptions = { tag: `note-id/${noteId}` };
+        matches = matches.filter(n => {
+          const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
+          return noteDomainTags.length === 0 || domainTags.some(dt => noteDomainTags.includes(dt));
+        });
       }
 
-      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedSoftware.push(this.normalizeNoteHandle(matches[0]));
       }
