@@ -23,50 +23,6 @@
   }, // end extractBracketText
 
   // ===============================================================================================
-  // Extracts bracketed domain from note titles (e.g. "[work]" → "work")
-  // Called from: Update Lists (to detect domains)
-  // ===============================================================================================
-  extractDomainFromTitle: function(title) {
-    const match = title.match(/\[(.*?)\]$/);
-    return match ? match[1].toLowerCase() : null;
-  }, // end extractDomainFromTitle
-
-  // ===============================================================================================
-  // Returns allowed top-level tag prefixes for a given list note title
-  // Called from: Update Lists (to limit types of note links to include in list notes)
-  // ===============================================================================================
-  getAllowedTagPrefixesForNoteTitle: function(title) {
-    if (title.startsWith("People List")) return ["people"];
-    if (title.startsWith("Reference List")) return ["reference"];
-    if (title.startsWith("Software List")) return ["software"];
-    if (title.startsWith("Horizons of Focus")) return ["project"]; // project notes only
-    if (title.startsWith("Active Project List")) return ["project"];
-    if (title.startsWith("Completed Project List")) return ["project"];
-    if (title.startsWith("Canceled Project List")) return ["project"];
-    return ["people", "reference", "software", "horizon"]; // fallback
-  }, // end getAllowedTagPrefixesForNoteTitle
-
-
-  // ===============================================================================================
-  // Determines if a note is people/software for use in r/ tag lookups
-  // Called from: Find Related Items
-  // ===============================================================================================
-  classifyNoteType: function(tags) {
-    if (tags.some(tag => tag.startsWith("people"))) return "people";
-    if (tags.some(tag => tag.startsWith("software"))) return "software";
-    return "unknown";
-  }, // end classifyNoteType
-
-  // ===============================================================================================
-  // Formats grouped projects into markdown list with optional fallback
-  // Called from: Find Related Items
-  // ===============================================================================================
-  formatMarkdownList: function(title, projects) {
-    if (projects.length === 0) return `- ${title}\n    - _No matching projects_`;
-    return `- ${title}\n` + projects.map(p => `    - [${p.title}](${p.url})`).join("\n");
-  }, // end formatMarkdownList
-
-  // ===============================================================================================
   // Converts a deadline timestamp into Pacific date string
   // Called from: Refresh Relevant Tasks
   // ===============================================================================================
@@ -107,69 +63,28 @@
     return { updatedContent, nextCounter: counter };
   }, // end uniquifyFootnotes
 
-  // ===============================================================================================
-  // Loads all tasks from notes with a domain tag (e.g. d/work)
-  // Called from: Find Related Items, Refresh Relevant Tasks
-  // ===============================================================================================
-  getAllTasksForTag: async function(app, tag, cache = {}) {
-    if (cache[tag]) return cache[tag]; //return cached tasks if already loaded
 
-    const noteHandles = await app.filterNotes({ tag });
-    const tasks = [];
-    for (const handle of noteHandles) {
-      const noteTasks = await app.getNoteTasks({ uuid: handle.uuid });
-      tasks.push(...noteTasks);
+// ===============================================================================================
+// Returns notes matching a given base tag, filtered by optional domain tags,
+// excluding any notes tagged with 'archive' or 'exclude'.
+// Called from anywhere instead of app.filterNotes to apply consistent exclusions.
+// ===============================================================================================
+  getFilteredNotes: async function (app, baseTag, domainTags = []) {
+    // Build tag filter string
+    let tagFilter = baseTag;
+
+    // Append domain tags (must match all provided domains)
+    if (domainTags.length > 0) {
+      tagFilter += "," + domainTags.join(",");
     }
 
-    cache[tag] = tasks; //store result in cache
-    return tasks;
-  }, // end getAllTasksForTag
+    // Append exclusions for 'archive' and 'exclude'
+    tagFilter += ",^archive,^exclude";
 
-  // ===============================================================================================
-  // Categorizes project notes by tag group (e.g. p/active, p/focus)
-  // Called from: Find Related Items
-  // ===============================================================================================
-  categorizeProjectNotes: async function(app, noteHandles) {
-    const categories = {
-      "Focus Projects": [],
-      "Active Projects": [],
-      "Tracking Projects": [],
-      "On Hold Projects": [],
-      "Future Projects": [],
-      "Someday Projects": [],
-      "Completed Projects": [],
-      "Canceled Projects": []
-    };
+    // Return matching notes
+    return await app.filterNotes({ tag: tagFilter });
+  }, // end getFilteredNotes
 
-    for (const handle of noteHandles) {
-      const note = await app.notes.find(handle.uuid);
-      if (!note) continue;
-      const noteData = {
-        title: note.name,
-        url: `https://www.amplenote.com/notes/${note.uuid}`,
-        modified: new Date(note.updated)
-      };
-
-      if (note.tags.includes("project/focus")) categories["Focus Projects"].push(noteData);
-      else if (note.tags.includes("project/active")) categories["Active Projects"].push(noteData);
-      else if (note.tags.includes("project/tracking")) categories["Tracking Projects"].push(noteData);
-      else if (note.tags.includes("project/on-hold")) categories["On Hold Projects"].push(noteData);
-      else if (note.tags.includes("project/future")) categories["Future Projects"].push(noteData);
-      else if (note.tags.includes("project/someday")) categories["Someday Projects"].push(noteData);
-      else if (note.tags.includes("project/completed")) categories["Completed Projects"].push(noteData);
-      else if (note.tags.includes("project/canceled")) categories["Canceled Projects"].push(noteData);
-    }
-
-    Object.entries(categories).forEach(([title, list]) => {
-      if (title === "Completed Projects" || title === "Canceled Projects") {
-        list.sort((a, b) => b.modified - a.modified);
-      } else {
-        list.sort((a, b) => a.title.localeCompare(b.title));
-      }
-    });
-
-    return categories;
-  }, // end categorizeProjectNotes
 
   // ===============================================================================================
   // Helper function to build a list of project notes. Paremeters allow for different formats:
@@ -607,14 +522,12 @@
           break;
       }
 
-      // Get matching notes by base tag
-      let matchingNotes = await app.filterNotes({ tag: baseTag });
-
-      // 🔹 Domain filter (OR logic)
+      // Get matching notes, adding single domain tag if present
+      let matchingNotes;
       if (domainTags.length > 0) {
-        matchingNotes = matchingNotes.filter(n =>
-          domainTags.some(dt => n.tags.includes(dt))
-        );
+        matchingNotes = await app.filterNotes({ tag: `${baseTag},${domainTags[0]}` });
+      } else {
+        matchingNotes = await app.filterNotes({ tag: baseTag });
       }
 
       // Build flat list with children
@@ -783,15 +696,14 @@
     const noteIdTag = await this.getNoteIdTag(app, note);
     const noteIdValue = noteIdTag.split("/")[1];
 
-    // Find vendor matches
-    let vendorMatches = await app.filterNotes({ tag: `r/vendor/${noteIdValue}` });
-
-    // 🔹 Domain filter
+    // Find vendor matches, adding domain filter if present
+    let filterOptions;
     if (domainTags.length > 0) {
-      vendorMatches = vendorMatches.filter(n =>
-        domainTags.some(dt => n.tags.includes(dt))
-      );
+      filterOptions = { tag: `r/vendor/${noteIdValue},${domainTags[0]}` };
+    } else {
+      filterOptions = { tag: `r/vendor/${noteIdValue}` };
     }
+    const vendorMatches = await app.filterNotes(filterOptions);
 
     const relatedVendors = vendorMatches.map(n => this.normalizeNoteHandle(n));
     relatedVendors.sort((a, b) => a.name.localeCompare(b.name));
@@ -824,14 +736,14 @@
     const noteIdTag = await this.getNoteIdTag(app, note);
     const noteIdValue = noteIdTag.split("/")[1];
 
-    let rTaggedNotes = await app.filterNotes({ tag: "r" });
-
-    // 🔹 Domain filter
+    // Get all notes tagged with "r" and optionally filter by domain
+    let filterOptions;
     if (domainTags.length > 0) {
-      rTaggedNotes = rTaggedNotes.filter(n =>
-        domainTags.some(dt => n.tags.includes(dt))
-      );
+      filterOptions = { tag: `r,${domainTags[0]}` }; // AND logic: must have "r" and the domain tag
+    } else {
+      filterOptions = { tag: "r" };
     }
+    let rTaggedNotes = await app.filterNotes(filterOptions);
 
     const allMatches = rTaggedNotes.filter(n =>
       n.tags.some(t => t.startsWith("r/") && t.endsWith(`/${noteIdValue}`))
@@ -886,15 +798,15 @@
     for (const tag of peopleTags) {
       const noteId = tag.split("/")[2];
 
-      let matches = await app.filterNotes({ tag: `note-id/${noteId}` });
-
-      // 🔹 Domain filter
+      // Build filter options with AND logic if a domain is present
+      let filterOptions;
       if (domainTags.length > 0) {
-        matches = matches.filter(n =>
-          domainTags.some(dt => n.tags.includes(dt))
-        );
+        filterOptions = { tag: `note-id/${noteId},${domainTags[0]}` };
+      } else {
+        filterOptions = { tag: `note-id/${noteId}` };
       }
 
+      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedPeople.push(this.normalizeNoteHandle(matches[0]));
       }
@@ -939,15 +851,15 @@
     for (const tag of referenceTags) {
       const noteId = tag.split("/")[2];
 
-      let matches = await app.filterNotes({ tag: `note-id/${noteId}` });
-
-      // 🔹 Domain filter
+      // Build filter options with AND logic if a domain is present
+      let filterOptions;
       if (domainTags.length > 0) {
-        matches = matches.filter(n =>
-          domainTags.some(dt => n.tags.includes(dt))
-        );
+        filterOptions = { tag: `note-id/${noteId},${domainTags[0]}` };
+      } else {
+        filterOptions = { tag: `note-id/${noteId}` };
       }
 
+      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedRefs.push(this.normalizeNoteHandle(matches[0]));
       }
@@ -992,15 +904,15 @@
     for (const tag of softwareTags) {
       const noteId = tag.split("/")[2];
 
-      let matches = await app.filterNotes({ tag: `note-id/${noteId}` });
-
-      // 🔹 Domain filter
+      // Build filter options with AND logic if a domain is present
+      let filterOptions;
       if (domainTags.length > 0) {
-        matches = matches.filter(n =>
-          domainTags.some(dt => n.tags.includes(dt))
-        );
+        filterOptions = { tag: `note-id/${noteId},${domainTags[0]}` };
+      } else {
+        filterOptions = { tag: `note-id/${noteId}` };
       }
 
+      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedSoftware.push(this.normalizeNoteHandle(matches[0]));
       }
