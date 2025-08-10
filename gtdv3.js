@@ -631,11 +631,12 @@
     // 4. Get backlinks (notes linking to this note)
     let backlinks = await note.backlinks();
 
-    // 🔹 Domain filtering for backlink notes (OR logic)
+    // 🔹 Domain filtering for backlink notes (include if no domain tags or matches current domain)
     if (domainTags.length > 0) {
-      backlinks = backlinks.filter(bn =>
-        domainTags.some(dt => bn.tags.includes(dt))
-      );
+      backlinks = backlinks.filter(bn => {
+        const noteDomainTags = bn.tags.filter(t => t.startsWith("d/"));
+        return noteDomainTags.length === 0 || domainTags.some(dt => noteDomainTags.includes(dt));
+      });
     }
 
     // 5. From those notes, get tasks referencing this note
