@@ -546,7 +546,7 @@
   // Updates any "Related *" sections with links to all related notes
   // Called from: 
   // ===============================================================================================
-  updateAllRelatedSections: async function (app, noteUUID) {
+  updateAllRelatedSections: async function (app, noteUUID, domainTags = []) {
     const staticSections = [
       { name: "Related Tasks", fn: this.updateRelatedTasksSection },
       { name: "Related Projects", fn: this.updateRelatedProjectsSection },
@@ -562,7 +562,7 @@
     let totalCount = 0;
 
     for (const section of staticSections) {
-      const result = await section.fn.call(this, app, noteUUID);
+      const result = await section.fn.call(this, app, noteUUID, domainTags);
       if (result && result.updated) {
         totalUpdated++;
         totalCount += result.count || 0;
@@ -576,7 +576,7 @@
   // Updates any bracketed text sections with links to all related notes
   // Called from: 
   // ===============================================================================================
-  updateBracketedSections: async function (app, note, listType) {
+  updateBracketedSections: async function (app, note, listType, domainTags = []) {
     const plugin = this;
     const sections = await app.getNoteSections({ uuid: note.uuid });
 
@@ -607,15 +607,21 @@
           break;
       }
 
+      // Build filter options
+      let filterOptions = { tag: baseTag };
+      if (domainTags.length > 0) {
+        filterOptions.tags = domainTags; // match all domain tags
+      }
+
       // Get matching notes
-      const matchingNotes = await app.filterNotes({ tag: baseTag });
+      const matchingNotes = await app.filterNotes(filterOptions);
 
       // Build flat list with children
       const md = await plugin.buildNestedProjectList(app, {
         baseNotes: matchingNotes,
         groupByStatus: "flat",
         includeChildren: true,
-        format: "standard" // Weekly Review will override this in future
+        format: "standard"
       });
 
       // Replace section content
@@ -632,6 +638,8 @@
 
   // ===============================================================================================
   // Updates any existing Child Projects section with links to all child projects
+  // Domain filtering intentionally omitted here because parent/child relationships 
+  // are always within the same domain. Add domainTags filter if that changes.
   // Called from: 
   // ===============================================================================================
   updateChildProjectsSection: async function(app, noteUUID) {
@@ -659,6 +667,8 @@
 
   // ===============================================================================================
   // Updates any existing Parent Projects section with links to all parent projects
+  // Domain filtering intentionally omitted here because parent/child relationships 
+  // are always within the same domain. Add domainTags filter if that changes.
   // Called from: 
   // ===============================================================================================
   updateParentProjectsSection: async function(app, noteUUID) {
@@ -688,7 +698,7 @@
   // Updates any existing Related Tasks section with links to all related tasks
   // Called from: 
   // ===============================================================================================
-  updateRelatedTasksSection: async function(app, noteUUID) {
+  updateRelatedTasksSection: async function(app, noteUUID, domainTags = []) {
     const sectionHeading = "Related Tasks";
 
     // 1. Find the section (don't add if it doesn't exist)
@@ -705,7 +715,14 @@
     const ownTasks = await app.getNoteTasks(noteUUID);
 
     // 4. Get backlinks (notes linking to this note)
-    const backlinks = await note.backlinks();
+    let backlinks = await note.backlinks();
+
+    // 🔹 Domain filtering for backlink notes
+    if (domainTags.length > 0) {
+      backlinks = backlinks.filter(bn =>
+        domainTags.every(dt => bn.tags.includes(dt))
+      );
+    }
 
     // 5. From those notes, get tasks referencing this note
     let referencedTasks = [];
@@ -754,7 +771,7 @@
   // Updates any existing Related Vendors section with links to all related vendors
   // Called from: 
   // ===============================================================================================
-  updateRelatedVendorsSection: async function(app, noteUUID) {
+  updateRelatedVendorsSection: async function(app, noteUUID, domainTags = []) {
     const sectionHeading = "Related Vendors";
 
     // Get all sections for the note
@@ -770,7 +787,11 @@
     const noteIdValue = noteIdTag.split("/")[1];
 
     // Find all vendor notes that reference this note's ID
-    const vendorMatches = await app.filterNotes({ tag: `r/vendor/${noteIdValue}` });
+    let filterOptions = { tag: `r/vendor/${noteIdValue}` };
+    if (domainTags.length > 0) {
+      filterOptions.tags = domainTags;
+    }
+    const vendorMatches = await app.filterNotes(filterOptions);
 
     // Normalize and sort
     const relatedVendors = vendorMatches.map(n => this.normalizeNoteHandle(n));
@@ -793,7 +814,7 @@
   // Updates any existing Related Projects section with links to all related projects
   // Called from: 
   // ===============================================================================================
-  updateRelatedProjectsSection: async function(app, noteUUID) {
+  updateRelatedProjectsSection: async function(app, noteUUID, domainTags = []) {
     const sectionHeading = "Related Projects";
 
     // Locate the section in the note
@@ -809,7 +830,13 @@
     const noteIdValue = noteIdTag.split("/")[1];
 
     // Find all related project notes
-    const rTaggedNotes = await app.filterNotes({ tag: "r" });
+    let rTaggedNotes;
+    if (domainTags.length > 0) {
+      rTaggedNotes = await app.filterNotes({ tag: "r", tags: domainTags });
+    } else {
+      rTaggedNotes = await app.filterNotes({ tag: "r" });
+    }
+
     const allMatches = rTaggedNotes.filter(n =>
       n.tags.some(t => t.startsWith("r/") && t.endsWith(`/${noteIdValue}`))
     );
@@ -843,7 +870,7 @@
   // Updates any existing Related People section with links to all related people
   // Called from: 
   // ===============================================================================================
-  updateRelatedPeopleSection: async function(app, noteUUID) {
+  updateRelatedPeopleSection: async function(app, noteUUID, domainTags = []) {
     const sectionHeading = "Related People";
 
     // Get all sections for the note
@@ -867,7 +894,13 @@
     const relatedPeople = [];
     for (const tag of peopleTags) {
       const noteId = tag.split("/")[2];
-      const matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+
+      let filterOptions = { tag: `note-id/${noteId}` };
+      if (domainTags.length > 0) {
+        filterOptions.tags = domainTags;
+      }
+
+      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedPeople.push(this.normalizeNoteHandle(matches[0]));
       }
@@ -893,7 +926,7 @@
   // Updates any existing Related References section with links to all related references
   // Called from: 
   // ===============================================================================================
-  updateRelatedReferencesSection: async function(app, noteUUID) {
+  updateRelatedReferencesSection: async function(app, noteUUID, domainTags = []) {
     const sectionHeading = "Related References";
 
     // Get all sections for the note
@@ -917,7 +950,13 @@
     const relatedRefs = [];
     for (const tag of referenceTags) {
       const noteId = tag.split("/")[2];
-      const matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+
+      let filterOptions = { tag: `note-id/${noteId}` };
+      if (domainTags.length > 0) {
+        filterOptions.tags = domainTags;
+      }
+
+      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedRefs.push(this.normalizeNoteHandle(matches[0]));
       }
@@ -943,7 +982,7 @@
   // Updates any existing Related Software section with links to all related software
   // Called from: 
   // ===============================================================================================
-  updateRelatedSoftwareSection: async function(app, noteUUID) {
+  updateRelatedSoftwareSection: async function(app, noteUUID, domainTags = []) {
     const sectionHeading = "Related Software";
 
     // Get all sections for the note
@@ -967,7 +1006,13 @@
     const relatedSoftware = [];
     for (const tag of softwareTags) {
       const noteId = tag.split("/")[2];
-      const matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+
+      let filterOptions = { tag: `note-id/${noteId}` };
+      if (domainTags.length > 0) {
+        filterOptions.tags = domainTags;
+      }
+
+      const matches = await app.filterNotes(filterOptions);
       if (matches.length > 0) {
         relatedSoftware.push(this.normalizeNoteHandle(matches[0]));
       }
@@ -1104,6 +1149,9 @@
       const plugin = this;
       const note = await app.notes.find(noteUUID);
 
+      // Detect any domain tags (d/work, d/home, etc.)
+      const domainTags = note.tags.filter(t => t.startsWith("d/"));
+
       let summary = { updatedSections: 0, totalItems: 0 };
 
       const isListNote = note.tags.some(t => t.startsWith("list/"));
@@ -1115,18 +1163,18 @@
           case "list/software":
           case "list/people":
           case "list/reference":
-            // Bracketed text flat mode updates
-            summary = await plugin.updateBracketedSections(app, note, listType);
+            // Bracketed text flat mode updates, filtered by domain
+            summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
             break;
 
           case "list/related":
-            // Run existing Related * section updates
-            summary = await plugin.updateAllRelatedSections(app, noteUUID);
+            // Run existing Related * section updates, filtered by domain
+            summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
             break;
         }
       } else {
-        // Non-list note → only update Related sections
-        summary = await plugin.updateAllRelatedSections(app, noteUUID);
+        // Non-list note → only update Related sections, filtered by domain
+        summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
       }
 
       await app.alert(
