@@ -498,7 +498,7 @@
     }
 
     // E: Parent projects with no child projects
-    const parentProjects = allNotes.filter(n => n.tags.some(t => t.startsWith("r/parent/")));
+    const parentProjects = allNotes.filter(n => n.tags.some(t => t.startsWith("r/child/")));
     const noChildren = [];
     for (const parent of parentProjects) {
       const children = await plugin.getChildNotes(app, parent.uuid);
@@ -509,7 +509,7 @@
     }
 
     // F: Child projects with no parent project
-    const childProjects = allNotes.filter(n => n.tags.some(t => t.startsWith("r/child/")));
+    const childProjects = allNotes.filter(n => n.tags.some(t => t.startsWith("r/parent/")));
     const noParent = [];
     for (const child of childProjects) {
       const parents = await plugin.getParentNotes(app, child.uuid);
