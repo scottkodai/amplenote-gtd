@@ -532,11 +532,10 @@
 
     // Find the Inbox note and update the Tagging Cleanup section
     const inbox = await app.findNote({ name: "Inbox" });
-    if (inboxNotes.length === 0) {
+    if (!inbox) {
       await app.alert("❌ Inbox note not found.");
       return;
     }
-    const inbox = inboxNotes[0];
     await app.replaceNoteContent(inbox.uuid, md, {
       section: { heading: { text: "Tagging Cleanup" } }
     });
