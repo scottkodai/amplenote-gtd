@@ -128,7 +128,7 @@
       const parentNoteIdTag = await this.getNoteIdTag(app, parentNote);
       const parentNoteIdValue = parentNoteIdTag.split("/")[1];
 
-      const related = await this.getFilteredNotes(app, `r/parent/${parentNoteIdValue}`, domainTags);
+      const related = await this.getFilteredNotes(app, `r/parent/${parentNoteIdValue}`);
 
       const children = related
         .filter(n => n.tags.some(t => t.startsWith("project/")))
