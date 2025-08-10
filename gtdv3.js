@@ -595,32 +595,42 @@
   updateRelatedProjectsSection: async function(app, noteUUID) {
     const sectionHeading = "Related Projects";
 
-    // Get all sections for the note
+    // Status order & display names
+    const projectStatuses = [
+      { tag: "project/focus", label: "Focus Projects" },
+      { tag: "project/active", label: "Active Projects" },
+      { tag: "project/tracking", label: "Tracking Projects" },
+      { tag: "project/on-hold", label: "On Hold Projects" },
+      { tag: "project/future", label: "Future Projects" },
+      { tag: "project/someday", label: "Someday Projects" },
+      { tag: "project/completed", label: "Completed Projects" },
+      { tag: "project/canceled", label: "Canceled Projects" }
+    ];
+
+    // Get section
     const sections = await app.getNoteSections({ uuid: noteUUID });
     const targetSection = sections.find(s =>
       s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
     );
     if (!targetSection) return { updated: false, count: 0 };
 
-    // Ensure the current note has a note-id
+    // Ensure note-id exists
     const note = await app.notes.find(noteUUID);
-    const noteIdTag = await this.getNoteIdTag(app, note); // returns existing or creates new
-    const noteIdValue = noteIdTag.split("/")[1]; // the actual ID portion
+    const noteIdTag = await this.getNoteIdTag(app, note);
+    const noteIdValue = noteIdTag.split("/")[1];
 
-    // Find all notes that have *any* r/ tag
+    // Find all r/ relationship notes for this note-id
     const rTaggedNotes = await app.filterNotes({ tag: "r" });
-
-    // Filter to only those whose tag ends with /<noteIdValue>
     const allMatches = rTaggedNotes.filter(n =>
       n.tags.some(t => t.startsWith("r/") && t.endsWith(`/${noteIdValue}`))
     );
 
-    // Filter down to project notes only
+    // Filter to project notes
     const projectMatches = allMatches.filter(n =>
       n.tags.some(t => t.startsWith("project/"))
     );
 
-    // Remove matches that are parent/child relationships
+    // Remove parent/child rels
     const filteredMatches = projectMatches.filter(n =>
       !n.tags.some(t =>
         t.startsWith(`r/parent/${noteIdValue}`) ||
@@ -628,21 +638,42 @@
       )
     );
 
-    // Normalize and sort
-    const relatedProjects = filteredMatches.map(n => this.normalizeNoteHandle(n));
-    relatedProjects.sort((a, b) => a.name.localeCompare(b.name));
+    // Group by project status
+    const grouped = {};
+    for (const status of projectStatuses) {
+      grouped[status.tag] = [];
+    }
 
-    // Build markdown list
-    const projectList = relatedProjects.length
-      ? relatedProjects.map(n => `- [${n.name}](${n.url})`).join("\n")
-      : "_(No related projects)_";
+    for (const proj of filteredMatches) {
+      const handle = this.normalizeNoteHandle(proj);
+      const statusTag = proj.tags.find(t => t.startsWith("project/"));
+      if (grouped[statusTag]) {
+        grouped[statusTag].push(handle);
+      }
+    }
+
+    // Build markdown
+    let md = "";
+    for (const status of projectStatuses) {
+      md += `- ${status.label}\n\n`;
+      if (grouped[status.tag].length > 0) {
+        grouped[status.tag]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .forEach(proj => {
+            md += `    - [${proj.name}](${proj.url}) \n\n`;
+          });
+      } else {
+        md += `    - *No matching projects*\n\n`;
+      }
+    }
 
     // Replace section content
-    await app.replaceNoteContent(noteUUID, projectList, {
+    await app.replaceNoteContent(noteUUID, md.trim(), {
       section: { heading: { text: sectionHeading } }
     });
 
-    return { updated: true, count: relatedProjects.length };
+    const totalCount = Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0);
+    return { updated: true, count: totalCount };
   }, // end updateRelatedProjectsSection
 
   // ===============================================================================================
