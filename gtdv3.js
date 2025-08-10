@@ -1074,85 +1074,26 @@
     }, // End Set Parent
 
     // =============================================================================================
-    // Convert project tags to note-id
-    // This function is temporary code to convert existing relationships to the new note-id style
+    // Get note-id
+    // This function returns the current note's note-id (and sets one if it doesn't exist yet)
     // =============================================================================================
-    "Convert project tags to note-id": async function (app, noteUUID) {
+    "Get note-id": async function (app, noteUUID) {
       const plugin = this;
-      const results = [];
-      let updatedCount = 0;
-      let errorCount = 0;
 
-      // Step 1: Get all project notes
-      const projectNotes = await app.filterNotes({ tag: "project" });
-
-      // Step 2: Get all people notes (tagged reference/people/*)
-      const peopleNotes = await app.filterNotes({ tag: "reference/people" });
-
-      // Step 3: Iterate over project notes
-      for (const proj of projectNotes) {
-        // Look for old-style r/people tags on this project
-        const oldPeopleTags = proj.tags.filter(tag =>
-          tag.startsWith("r/people/") &&
-          !/^\d+$/.test(tag.split("/")[2]) // exclude note-id form (numeric only)
-        );
-
-        if (oldPeopleTags.length === 0) continue;
-
-        for (const oldTag of oldPeopleTags) {
-          const username = oldTag.split("/")[2];
-
-          // Step 4: Find matching People note by [username] in title
-          const matchingPerson = peopleNotes.find(p => {
-            const bracketText = plugin.extractBracketText(p.name);
-            return bracketText === username;
-          });
-
-          if (!matchingPerson) {
-            results.push({
-              projectNote: proj.name,
-              projectUUID: proj.uuid,
-              oldTag,
-              error: `No matching people note found for username '${username}'`
-            });
-            errorCount++;
-            continue;
-          }
-
-          // Step 5: Get (and create if missing) the note-id for the People note
-          const personNoteObj = await app.notes.find(matchingPerson.uuid);
-          const noteIdTag = await plugin.getNoteIdTag(app, personNoteObj);
-
-          // Step 6: Actually update the tags on the project note
-          const projectNoteObj = await app.notes.find(proj.uuid);
-
-          // Remove the old r/people/<username> tag
-          await projectNoteObj.removeTag(oldTag);
-
-          // Add the new r/people/<note-id> tag
-          await projectNoteObj.addTag(`r/people/${noteIdTag.replace("note-id/", "")}`);
-
-          updatedCount++;
-          results.push({
-            projectNote: proj.name,
-            updatedFrom: oldTag,
-            updatedTo: `r/people/${noteIdTag.replace("note-id/", "")}`
-          });
-        }
+      // Step 1: Get the current note
+      const note = await app.notes.find(noteUUID);
+      if (!note) {
+        await app.alert("❌ Could not find the note.");
+        return;
       }
 
-      // Summary alert
-      await app.alert(
-        `✅ Conversion complete\n` +
-        `Updated: ${updatedCount} relationships\n` +
-        `Errors: ${errorCount}\n\n` +
-        results.map(r =>
-          r.error
-            ? `${r.projectNote}: ${r.oldTag} ❌ ${r.error}`
-            : `${r.projectNote}: ${r.updatedFrom} → ${r.updatedTo}`
-        ).join("\n")
-      );
-    }, // end Convert project tags to note-id
+      // Step 2: Get or create the note-id tag
+      const noteIdTag = await plugin.getNoteIdTag(app, note);
+
+      // Step 3: Show the result
+      await app.alert(`Note ID for "${note.name}":\n${noteIdTag.replace("note-id/", "")}`);
+    },  // end Get note-id
+
 
     // =============================================================================================
     // Testing
