@@ -543,6 +543,94 @@
 // =================================================================================================
 
   // ===============================================================================================
+  // Updates any "Related *" sections with links to all related notes
+  // Called from: 
+  // ===============================================================================================
+  updateAllRelatedSections: async function (app, noteUUID) {
+    const staticSections = [
+      { name: "Related Tasks", fn: this.updateRelatedTasksSection },
+      { name: "Related Projects", fn: this.updateRelatedProjectsSection },
+      { name: "Related People", fn: this.updateRelatedPeopleSection },
+      { name: "Related References", fn: this.updateRelatedReferencesSection },
+      { name: "Related Software", fn: this.updateRelatedSoftwareSection },
+      { name: "Related Vendors", fn: this.updateRelatedVendorsSection },
+      { name: "Parent Projects", fn: this.updateParentProjectsSection },
+      { name: "Child Projects", fn: this.updateChildProjectsSection }
+    ];
+
+    let totalUpdated = 0;
+    let totalCount = 0;
+
+    for (const section of staticSections) {
+      const result = await section.fn.call(this, app, noteUUID);
+      if (result && result.updated) {
+        totalUpdated++;
+        totalCount += result.count || 0;
+      }
+    }
+
+    return { updatedSections: totalUpdated, totalItems: totalCount };
+  }, //end updateAllRelatedSections
+
+  // ===============================================================================================
+  // Updates any bracketed text sections with links to all related notes
+  // Called from: 
+  // ===============================================================================================
+  updateBracketedSections: async function (app, note, listType) {
+    const plugin = this;
+    const sections = await app.getNoteSections({ uuid: note.uuid });
+
+    let totalUpdated = 0;
+    let totalCount = 0;
+
+    for (const section of sections) {
+      if (!section.heading || !section.heading.text.includes("[")) continue;
+
+      const match = section.heading.text.match(/\[([^\]]+)\]/);
+      if (!match) continue;
+      const subtag = match[1]; // e.g., "focus", "it-leadership"
+
+      // Figure out the base tag for filtering
+      let baseTag = "";
+      switch (listType) {
+        case "list/project":
+          baseTag = `project/${subtag}`;
+          break;
+        case "list/software":
+          baseTag = `reference/software/${subtag}`;
+          break;
+        case "list/people":
+          baseTag = `reference/people/${subtag}`;
+          break;
+        case "list/reference":
+          baseTag = `reference/${subtag}`;
+          break;
+      }
+
+      // Get matching notes
+      const matchingNotes = await app.filterNotes({ tag: baseTag });
+
+      // Build flat list with children
+      const md = await plugin.buildNestedProjectList(app, {
+        baseNotes: matchingNotes,
+        groupByStatus: "flat",
+        includeChildren: true,
+        format: "standard" // Weekly Review will override this in future
+      });
+
+      // Replace section content
+      await app.replaceNoteContent(note.uuid, md, {
+        section: { heading: { text: section.heading.text } }
+      });
+
+      totalUpdated++;
+      totalCount += matchingNotes.length;
+    }
+
+    return { updatedSections: totalUpdated, totalItems: totalCount };
+  }, //end updateBracketedSections
+
+  // ===============================================================================================
   // Updates any existing Child Projects section with links to all child projects
   // Called from: 
   // ===============================================================================================
@@ -1012,31 +1100,40 @@
     // This function is the orchestrator for updating the current note in whatever ways are 
     // appropriate
     // =============================================================================================
-    "Update Note": async function(app, noteUUID) {
-    const plugin = this;
-    const staticSections = [
-        { name: "Related Tasks", fn: this.updateRelatedTasksSection },
-        { name: "Related Projects", fn: this.updateRelatedProjectsSection },
-        { name: "Related People", fn: this.updateRelatedPeopleSection },
-        { name: "Related References", fn: this.updateRelatedReferencesSection },
-        { name: "Related Software", fn: this.updateRelatedSoftwareSection },
-        { name: "Related Vendors", fn: this.updateRelatedVendorsSection },
-        { name: "Parent Projects", fn: this.updateParentProjectsSection },
-        { name: "Child Projects", fn: this.updateChildProjectsSection }
-      ];
+    "Update Note": async function (app, noteUUID) {
+      const plugin = this;
+      const note = await app.notes.find(noteUUID);
 
-      const results = [];
-      for (const { name, fn } of staticSections) {
-        const result = await fn.call(this, app, noteUUID);
-        if (result.updated) {
-          results.push(`✅ ${name}: ${result.count} item(s)`);
+      let summary = { updatedSections: 0, totalItems: 0 };
+
+      const isListNote = note.tags.some(t => t.startsWith("list/"));
+      if (isListNote) {
+        const listType = note.tags.find(t => t.startsWith("list/"));
+
+        switch (listType) {
+          case "list/project":
+          case "list/software":
+          case "list/people":
+          case "list/reference":
+            // Bracketed text flat mode updates
+            summary = await plugin.updateBracketedSections(app, note, listType);
+            break;
+
+          case "list/related":
+            // Run existing Related * section updates
+            summary = await plugin.updateAllRelatedSections(app, noteUUID);
+            break;
         }
+      } else {
+        // Non-list note → only update Related sections
+        summary = await plugin.updateAllRelatedSections(app, noteUUID);
       }
 
-      const summary = results.length
-        ? results.join("\n")
-        : "No sections updated.";
-      await app.alert(summary);
+      await app.alert(
+        `✅ Update complete for "${note.name}"\n` +
+        `Sections updated: ${summary.updatedSections}\n` +
+        `Total items updated: ${summary.totalItems}`
+      );
     }, // end Update Note
 
     // =============================================================================================
