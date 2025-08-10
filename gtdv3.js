@@ -189,7 +189,7 @@
   // ===============================================================================================
   buildNestedProjectList: async function(app, {
     baseNotes,
-    groupByStatus = "full", // for now only "full" is implemented
+    groupByStatus = "full", // "full" or "flat" (we'll leave "none" for later if needed)
     includeChildren = true,
     format = "standard",
     sortCompletedByDate = false
@@ -204,20 +204,6 @@
       { tag: "project/completed", label: "Completed Projects" },
       { tag: "project/canceled", label: "Canceled Projects" }
     ];
-
-    // Group projects by status
-    const grouped = {};
-    for (const status of projectStatuses) {
-      grouped[status.tag] = [];
-    }
-
-    for (const proj of baseNotes) {
-      const handle = this.normalizeNoteHandle(proj);
-      const statusTag = proj.tags.find(t => t.startsWith("project/"));
-      if (grouped[statusTag]) {
-        grouped[statusTag].push({ handle, uuid: proj.uuid, tags: proj.tags });
-      }
-    }
 
     // Track displayed projects to avoid duplicates
     const displayed = new Set();
@@ -245,28 +231,58 @@
       return md;
     };
 
-    // Build markdown
     let md = "";
-    for (const status of projectStatuses) {
-      md += `- ${status.label}\n\n`;
-      if (grouped[status.tag].length > 0) {
-        grouped[status.tag].sort((a, b) => a.handle.name.localeCompare(b.handle.name));
-        for (const { handle, uuid } of grouped[status.tag]) {
-          if (displayed.has(uuid)) continue;
-          displayed.add(uuid);
-          md += `    - [${handle.name}](${handle.url})\n\n`;
-          if (includeChildren) {
-            md += await getChildMarkdown(uuid, 2);
-          }
+
+    if (groupByStatus === "full") {
+      // Group projects by status
+      const grouped = {};
+      for (const status of projectStatuses) {
+        grouped[status.tag] = [];
+      }
+
+      for (const proj of baseNotes) {
+        const handle = this.normalizeNoteHandle(proj);
+        const statusTag = proj.tags.find(t => t.startsWith("project/"));
+        if (grouped[statusTag]) {
+          grouped[statusTag].push({ handle, uuid: proj.uuid, tags: proj.tags });
         }
-      } else {
-        md += `    - *No matching projects*\n\n`;
+      }
+
+      for (const status of projectStatuses) {
+        md += `- ${status.label}\n\n`;
+        if (grouped[status.tag].length > 0) {
+          grouped[status.tag].sort((a, b) => a.handle.name.localeCompare(b.handle.name));
+          for (const { handle, uuid } of grouped[status.tag]) {
+            if (displayed.has(uuid)) continue;
+            displayed.add(uuid);
+            md += `    - [${handle.name}](${handle.url})\n\n`;
+            if (includeChildren) {
+              md += await getChildMarkdown(uuid, 2);
+            }
+          }
+        } else {
+          md += `    - *No matching projects*\n\n`;
+        }
+      }
+
+    } else if (groupByStatus === "flat") {
+      // Just output the list, no top-level status headings
+      const sorted = baseNotes
+        .map(n => ({ handle: this.normalizeNoteHandle(n), uuid: n.uuid }))
+        .sort((a, b) => a.handle.name.localeCompare(b.handle.name));
+
+      for (const { handle, uuid } of sorted) {
+        if (displayed.has(uuid)) continue;
+        displayed.add(uuid);
+        md += `- [${handle.name}](${handle.url})\n\n`;
+        if (includeChildren) {
+          md += await getChildMarkdown(uuid, 1);
+        }
       }
     }
 
     return md.trim();
   }, // end buildNestedProjectList
-
 
   // ===============================================================================================
   // Returns a copy of the given note handle with a .url property added.
