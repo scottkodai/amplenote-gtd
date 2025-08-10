@@ -70,18 +70,16 @@
   // Called from anywhere instead of app.filterNotes to apply consistent exclusions.
   // ===============================================================================================
   getFilteredNotes: async function (app, baseTag, domainTags = []) {
-    let tagFilter = baseTag;
+    let notes = await app.filterNotes({ tag: baseTag + ",^archive,^exclude" });
 
-    // Use only the first domain tag if multiple are passed
-    // Double domain tags are caught in the cleanup script
     if (domainTags.length > 0) {
-      tagFilter += "," + domainTags[0];
+      notes = notes.filter(n => {
+        const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
+        return noteDomainTags.length === 0 || domainTags.some(dt => noteDomainTags.includes(dt));
+      });
     }
 
-    // Always exclude archive/exclude
-    tagFilter += ",^archive,^exclude";
-
-    return await app.filterNotes({ tag: tagFilter });
+    return notes;
   }, // end getFilteredNotes
 
 
