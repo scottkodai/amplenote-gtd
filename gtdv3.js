@@ -104,8 +104,7 @@
     groupByStatus = "full",
     includeChildren = true,
     format = "standard",
-    sortCompletedByDate = false,
-    startIndent = 0 // NEW: allows shifting entire list right
+    sortCompletedByDate = false
   }) {
     const projectStatuses = [
       { tag: "project/focus", label: "Focus Projects" },
@@ -586,8 +585,7 @@
         baseNotes: matchingNotes,
         groupByStatus: "flat",
         includeChildren: true,
-        format: "standard",
-        startIndent: 0 // top-level list, no extra indent
+        format: "standard"
       });
 
       // Replace section content
@@ -813,8 +811,7 @@
       baseNotes: filteredMatches,
       groupByStatus: "full",
       includeChildren: true,
-      format: "standard",
-      startIndent: 1 //inside a section, so indent extra
+      format: "standard"
     });
 
     await app.replaceNoteContent(noteUUID, md, {
