@@ -101,10 +101,11 @@
   // ===============================================================================================
   buildNestedProjectList: async function(app, {
     baseNotes,
-    groupByStatus = "full", // "full" or "flat" (we'll leave "none" for later if needed)
+    groupByStatus = "full",
     includeChildren = true,
     format = "standard",
-    sortCompletedByDate = false
+    sortCompletedByDate = false,
+    startIndent = 0 // NEW: allows shifting entire list right
   }) {
     const projectStatuses = [
       { tag: "project/focus", label: "Focus Projects" },
@@ -117,7 +118,6 @@
       { tag: "project/canceled", label: "Canceled Projects" }
     ];
 
-    // Track displayed projects to avoid duplicates
     const displayed = new Set();
 
     // Recursive child renderer
@@ -137,7 +137,7 @@
       for (const child of children) {
         if (displayed.has(child.uuid)) continue;
         displayed.add(child.uuid);
-        md += `${"    ".repeat(indentLevel)}- [${child.handle.name}](${child.handle.url})\n\n`;
+        md += `${"    ".repeat(startIndent + indentLevel)}- [${child.handle.name}](${child.handle.url})\n\n`;
         md += await getChildMarkdown(child.uuid, indentLevel + 1);
       }
       return md;
@@ -146,7 +146,6 @@
     let md = "";
 
     if (groupByStatus === "full") {
-      // Group projects by status
       const grouped = {};
       for (const status of projectStatuses) {
         grouped[status.tag] = [];
@@ -161,24 +160,23 @@
       }
 
       for (const status of projectStatuses) {
-        md += `- ${status.label}\n\n`;
+        md += `${"    ".repeat(startIndent)}- ${status.label}\n\n`;
         if (grouped[status.tag].length > 0) {
           grouped[status.tag].sort((a, b) => a.handle.name.localeCompare(b.handle.name));
           for (const { handle, uuid } of grouped[status.tag]) {
             if (displayed.has(uuid)) continue;
             displayed.add(uuid);
-            md += `    - [${handle.name}](${handle.url})\n\n`;
+            md += `${"    ".repeat(startIndent + 1)}- [${handle.name}](${handle.url})\n\n`;
             if (includeChildren) {
               md += await getChildMarkdown(uuid, 2);
             }
           }
         } else {
-          md += `    - *No matching projects*\n\n`;
+          md += `${"    ".repeat(startIndent + 1)}- *No matching projects*\n\n`;
         }
       }
 
     } else if (groupByStatus === "flat") {
-      // Just output the list, no top-level status headings
       const sorted = baseNotes
         .map(n => ({ handle: this.normalizeNoteHandle(n), uuid: n.uuid }))
         .sort((a, b) => a.handle.name.localeCompare(b.handle.name));
@@ -186,7 +184,7 @@
       for (const { handle, uuid } of sorted) {
         if (displayed.has(uuid)) continue;
         displayed.add(uuid);
-        md += `- [${handle.name}](${handle.url})\n\n`;
+        md += `${"    ".repeat(startIndent)}- [${handle.name}](${handle.url})\n\n`;
         if (includeChildren) {
           md += await getChildMarkdown(uuid, 1);
         }
@@ -588,7 +586,8 @@
         baseNotes: matchingNotes,
         groupByStatus: "flat",
         includeChildren: true,
-        format: "standard"
+        format: "standard",
+        startIndent: 0 // top-level list, no extra indent
       });
 
       // Replace section content
@@ -814,7 +813,8 @@
       baseNotes: filteredMatches,
       groupByStatus: "full",
       includeChildren: true,
-      format: "standard"
+      format: "standard",
+      startIndent: 1 //inside a section, so indent extra
     });
 
     await app.replaceNoteContent(noteUUID, md, {
