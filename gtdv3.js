@@ -82,22 +82,21 @@
     return notes;
   }, // end getFilteredNotes
 
-
   // ===============================================================================================
-  // Helper function to build a list of project notes. Paremeters allow for different formats:
-  // - groupByStatus: 
-  // -- "full" means a bulleted list with statuses as top-level bullets
-  // -- "flat" means a list of projects without top-level status bullets (for [bracketed text] lists)
-  // -- "none" means a list of all projects with no grouping
+  // Helper function to build a list of project notes. Parameters allow for different formats:
+  // - groupByStatus:
+  //    -- "full" means a bulleted list with statuses as top-level bullets
+  //    -- "flat" means a list of projects without top-level status bullets (for [bracketed text] lists)
+  //    -- "none" means a list of all projects with no grouping
   // - includeChildren:
-  // -- "true" means that children will be nested under parents
-  // -- "false" means that children will be listed as standalone projects
+  //    -- true means that children will be nested under parents
+  //    -- false means that children will be listed as standalone projects
   // - format:
-  // -- "standard" means just lists of projects
-  // -- "weeklyReview" means additional metadata about each project listed as sub-bullets
+  //    -- "standard" means just lists of projects
+  //    -- "weeklyReview" means additional metadata about each project listed as sub-bullets
   // - sortCompletedByDate:
-  // -- "true" means that completed projects will be sorted by date desc (based on subtag) instead of alphabetically
-  // -- "false" means that completed projects will be sorted alphabetically
+  //    -- true means that completed projects will be sorted by date desc (based on subtag) instead of alphabetically
+  //    -- false means that completed projects will be sorted alphabetically
   // ===============================================================================================
   buildNestedProjectList: async function(app, {
     baseNotes,
@@ -119,7 +118,7 @@
 
     const displayed = new Set();
 
-    // Recursive child renderer
+    // Recursive child renderer — sorts children alphabetically per parent
     const getChildMarkdown = async (parentUUID, indentLevel) => {
       const parentNote = await app.notes.find(parentUUID);
       const parentNoteIdTag = await this.getNoteIdTag(app, parentNote);
@@ -136,7 +135,7 @@
       for (const child of children) {
         if (displayed.has(child.uuid)) continue;
         displayed.add(child.uuid);
-        md += `${"    ".repeat(startIndent + indentLevel)}- [${child.handle.name}](${child.handle.url})\n\n`;
+        md += `${"    ".repeat(indentLevel)}- [${child.handle.name}](${child.handle.url})\n\n`;
         md += await getChildMarkdown(child.uuid, indentLevel + 1);
       }
       return md;
@@ -159,33 +158,31 @@
       }
 
       for (const status of projectStatuses) {
-        md += `${"    ".repeat(startIndent)}- ${status.label}\n\n`;
+        md += `- ${status.label}\n\n`;
         if (grouped[status.tag].length > 0) {
           grouped[status.tag].sort((a, b) => a.handle.name.localeCompare(b.handle.name));
           for (const { handle, uuid } of grouped[status.tag]) {
             if (displayed.has(uuid)) continue;
             displayed.add(uuid);
-            md += `${"    ".repeat(startIndent + 1)}- [${handle.name}](${handle.url})\n\n`;
+            md += `    - [${handle.name}](${handle.url})\n\n`;
             if (includeChildren) {
               md += await getChildMarkdown(uuid, 2);
             }
           }
         } else {
-          md += `${"    ".repeat(startIndent + 1)}- *No matching projects*\n\n`;
+          md += `    - *No matching projects*\n\n`;
         }
       }
 
     } else if (groupByStatus === "flat") {
-      const sorted = baseNotes
-        .map(n => ({ handle: this.normalizeNoteHandle(n), uuid: n.uuid }))
-        .sort((a, b) => a.handle.name.localeCompare(b.handle.name));
-
-      for (const { handle, uuid } of sorted) {
-        if (displayed.has(uuid)) continue;
-        displayed.add(uuid);
-        md += `${"    ".repeat(startIndent)}- [${handle.name}](${handle.url})\n\n`;
+      // Keep incoming order of baseNotes — do not globally sort
+      for (const proj of baseNotes) {
+        const handle = this.normalizeNoteHandle(proj);
+        if (displayed.has(proj.uuid)) continue;
+        displayed.add(proj.uuid);
+        md += `- [${handle.name}](${handle.url})\n\n`;
         if (includeChildren) {
-          md += await getChildMarkdown(uuid, 1);
+          md += await getChildMarkdown(proj.uuid, 1);
         }
       }
     }
@@ -567,18 +564,6 @@
       // Get all notes with the base tag
       //let matchingNotes = await app.filterNotes({ tag: baseTag });
       let matchingNotes = await this.getFilteredNotes(app, baseTag, domainTags);
-
-      // Apply domain filter: include notes with matching domain OR no domain tag
-      if (domainTags.length > 0) {
-        const domainTag = domainTags[0];
-        matchingNotes = matchingNotes.filter(n => {
-          const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
-          return (
-            noteDomainTags.length === 0 || // no domain tag → include
-            noteDomainTags.includes(domainTag) // matches current domain → include
-          );
-        });
-      }
 
       // Build flat list with children
       const md = await plugin.buildNestedProjectList(app, {
