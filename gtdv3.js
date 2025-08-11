@@ -381,7 +381,7 @@
   // Determines note type
   // Called from: 
   // ===============================================================================================
-  function getNoteType(note) {
+  getNoteType: function (note) {
     // Priorities: list/*, project/*, reference/subtype, plain single-word types
     const tag = note.tags.find(t =>
       t.startsWith("list/") ||
