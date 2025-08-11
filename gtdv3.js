@@ -982,7 +982,7 @@
       }
       await this.buildRelationship(app, uuidMatch[1]);
     } // end Build Relationship
-  } // End linkOption
+  }, // end linkOption
 
 
 // =================================================================================================
