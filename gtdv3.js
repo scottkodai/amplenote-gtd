@@ -8,7 +8,7 @@
   // ===============================================================================================
   // Escapes square brackets from titles for literal matching in markdown links
   // Called from: Find Related Items, used to escape brackets in task content comparisons
-  // ===============================================================================================
+  // ==============================================================================================+
   escapeBrackets: function(text) {
     return text.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
   }, // end escapeBrackets
@@ -355,8 +355,8 @@
     const relatedNoteId = relatedNoteIdTag.split("/")[1];
 
     // Step 3: Determine note types
-    const noteType = getNoteType(note);
-    const relatedType = getNoteType(relatedNote);
+    const noteType = this.getNoteType(note);
+    const relatedType = this.getNoteType(relatedNote);
 
     if (!noteType || !relatedType) {
       await app.alert("❌ Could not determine note type for one or both notes.");
@@ -981,8 +981,8 @@
         return;
       }
       await this.buildRelationship(app, uuidMatch[1]);
-    }, // end Build Relationship
-  }, // End linkOption
+    } // end Build Relationship
+  } // End linkOption
 
 
 // =================================================================================================
