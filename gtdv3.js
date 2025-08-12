@@ -1166,7 +1166,7 @@
         await app.alert("❌ Invalid note link.");
         return;
       }
-      await this.setNoteTags(app, uuidMatch[1]);
+      await plugin.setNoteTags(app, uuidMatch[1]);
     }, // end Set Note Tags
   }, // end linkOption
 
@@ -1189,7 +1189,7 @@
     // Calls setNoteTags to manage tags on current note
     // =============================================================================================
     "Set Note Tags": async function(app, noteUUID) {
-      await this.setNoteTags(app, noteUUID);
+      await plugin.setNoteTags(app, noteUUID);
     }, //end Set Note Tags
 
     // =============================================================================================
