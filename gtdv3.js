@@ -506,10 +506,16 @@
       return;
     }
 
+    await app.alert("Starting setNoteTags"); 
+
     const isProjectNote = note.tags.some(t => t.startsWith("project/"));
+
+    await app.alert("isProjectNote: " + isProjectNote); 
 
     // Helper: Get all related notes in readable form
     const currentRelations = await plugin.getReadableRelationships(app, note);
+
+    await app.alert("currentRelations: " + currentRelations); 
 
     // Build prompt inputs
     const inputs = [];
@@ -542,7 +548,7 @@
     }
 
     await app.alert("Inputs: " + inputs); 
-    
+
     // Show main prompt with two buttons
     const response = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
