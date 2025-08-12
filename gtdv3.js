@@ -541,6 +541,8 @@
       });
     }
 
+    await app.alert("Inputs: " + inputs); 
+    
     // Show main prompt with two buttons
     const response = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
