@@ -506,16 +506,8 @@
       return;
     }
 
-    await app.alert("Starting setNoteTags"); 
-
     const isProjectNote = note.tags.some(t => t.startsWith("project/"));
-
-    await app.alert("isProjectNote: " + isProjectNote); 
-
-    // Helper: Get all related notes in readable form
     const currentRelations = await plugin.getReadableRelationships(app, note);
-
-    await app.alert("currentRelations: " + JSON.stringify(currentRelations)); 
 
     // Build prompt inputs
     const inputs = [];
@@ -531,7 +523,8 @@
           "project/on-hold",
           "project/future",
           "project/someday",
-          "project/completed" // YYYYMM subtag will be appended automatically
+          "project/completed",
+          "project/canceled"
         ]
       });
       inputs.push({ label: "Parent Project", type: "note" });
@@ -547,45 +540,58 @@
       });
     }
 
-    await app.alert("Inputs: " + JSON.stringify(inputs)); 
-
-    // Show main prompt with two buttons
-    const response = await app.prompt(`Set tags for "${note.name}"`, {
+    // Prompt with just Continue as extra action
+    const result = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
-      buttons: ["Submit", "Continue", "Cancel"]
+      actions: [
+        { label: "Continue", value: "continue" }
+      ]
     });
-    if (!response) return; // cancelled
+
+    if (!result) return; // user canceled
+
+    // Extract action (last element if action clicked, otherwise undefined for Submit)
+    const actionValue = result[result.length - 1];
+    const actionWasContinue = actionValue === "continue";
+
+    // Map results back to inputs
+    let inputIndex = 0;
+    const getNext = () => result[inputIndex++];
+
+    const projectStatusValue = isProjectNote ? getNext() : null;
+    const parentProjectValue = isProjectNote ? getNext() : null;
+    const addRelationshipValue = getNext();
+    const removeRelationshipValue = currentRelations.length > 0 ? getNext() : null;
 
     // === Process changes ===
 
     // Project status update
-    if (isProjectNote && response["Project Status"]) {
-      // Remove old project/* tag first
+    if (isProjectNote && projectStatusValue) {
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
       if (oldStatus) await note.removeTag(oldStatus);
 
-      if (response["Project Status"] === "project/completed") {
+      if (projectStatusValue === "project/completed") {
         const now = new Date();
         const datestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
         await note.addTag(`project/completed/${datestamp}`);
       } else {
-        await note.addTag(response["Project Status"]);
+        await note.addTag(projectStatusValue);
       }
     }
 
     // Parent project setting
-    if (isProjectNote && response["Parent Project"]?.uuid) {
-      await plugin.setParentChildRelationship(app, noteUUID, response["Parent Project"].uuid);
+    if (isProjectNote && parentProjectValue?.uuid) {
+      await plugin.setParentChildRelationship(app, noteUUID, parentProjectValue.uuid);
     }
 
     // Add relationship
-    if (response["Add Relationship"]?.uuid) {
-      await plugin.addRelationshipByType(app, note, response["Add Relationship"]);
+    if (addRelationshipValue?.uuid) {
+      await plugin.addRelationshipByType(app, note, addRelationshipValue);
     }
 
     // Remove relationship
-    if (response["Remove Relationship"]) {
-      const relation = currentRelations.find(r => r.label === response["Remove Relationship"]);
+    if (removeRelationshipValue) {
+      const relation = currentRelations.find(r => r.label === removeRelationshipValue);
       if (relation) {
         await plugin.removeRelationship(app, note, relation);
       }
@@ -595,16 +601,16 @@
     const domainTags = note.tags.filter(t => t.startsWith("d/"));
     const summary = await this.updateAllRelatedSections(app, noteUUID, domainTags);
 
-    // === Test-friendly confirmation alert ===
+    // Confirmation alert
     await app.alert(
       `✅ Tags updated for "${note.name}"\n` +
       `Sections refreshed: ${summary.updatedSections}\n` +
       `Total items updated: ${summary.totalItems}`
     );
 
-    // === Loop if Continue was pressed ===
-    if (response.button === "Continue") {
-      await plugin.setNoteTags(app, noteUUID);
+    // Loop if Continue was pressed
+    if (actionWasContinue) {
+      await this.setNoteTags(app, noteUUID);
     }
   }, // end setNoteTags
 
@@ -1197,7 +1203,7 @@
     // Calls setNoteTags to manage tags on current note
     // =============================================================================================
     "Set Note Tags": async function(app, noteUUID) {
-      await app.alert("Getting ready to call setNoteTags");
+      //await app.alert("Getting ready to call setNoteTags");
       await this.setNoteTags(app, noteUUID);
     }, //end Set Note Tags
 
