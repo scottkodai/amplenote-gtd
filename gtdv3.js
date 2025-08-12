@@ -394,7 +394,6 @@
     return tag;
   }, // end getNoteType
 
-
   // ===============================================================================================
   // Runs the tagging cleanup process and updates the "Tagging Cleanup" section in the Inbox note
   // ===============================================================================================
@@ -489,6 +488,199 @@
 
     await app.alert("✅ Tagging Cleanup section updated in Inbox.");
   }, // end taggingCleanup
+
+// =================================================================================================
+// =================================================================================================
+//                                     Tag Management functions
+// =================================================================================================
+// =================================================================================================
+
+  // ===============================================================
+  // setNoteTags: function to allow user to manage tags via prompt
+  // ===============================================================
+  setNoteTags: async function(app, noteUUID) {
+    const plugin = this;
+    const note = await app.notes.find(noteUUID);
+    if (!note) {
+      await app.alert("❌ Could not find the current note.");
+      return;
+    }
+
+    const isProjectNote = note.tags.some(t => t.startsWith("project/"));
+
+    // Helper: Get all related notes in readable form
+    const currentRelations = await plugin.getReadableRelationships(app, note);
+
+    // Build prompt inputs
+    const inputs = [];
+    if (isProjectNote) {
+      inputs.push({
+        label: "Project Status",
+        type: "select",
+        options: [
+          "",
+          "project/focus",
+          "project/active",
+          "project/tracking",
+          "project/on-hold",
+          "project/future",
+          "project/someday",
+          "project/completed" // YYYYMM subtag will be appended automatically
+        ]
+      });
+      inputs.push({ label: "Parent Project", type: "note" });
+    }
+
+    inputs.push({ label: "Add Relationship", type: "note" });
+
+    if (currentRelations.length > 0) {
+      inputs.push({
+        label: "Remove Relationship",
+        type: "select",
+        options: ["", ...currentRelations.map(r => r.label)]
+      });
+    }
+
+    // Show main prompt with two buttons
+    const response = await app.prompt(`Set tags for "${note.name}"`, {
+      inputs,
+      buttons: ["Submit", "Continue", "Cancel"]
+    });
+    if (!response) return; // cancelled
+
+    // === Process changes ===
+
+    // Project status update
+    if (isProjectNote && response["Project Status"]) {
+      // Remove old project/* tag first
+      const oldStatus = note.tags.find(t => t.startsWith("project/"));
+      if (oldStatus) await note.removeTag(oldStatus);
+
+      if (response["Project Status"] === "project/completed") {
+        const now = new Date();
+        const datestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+        await note.addTag(`project/completed/${datestamp}`);
+      } else {
+        await note.addTag(response["Project Status"]);
+      }
+    }
+
+    // Parent project setting
+    if (isProjectNote && response["Parent Project"]?.uuid) {
+      await plugin.setParentChildRelationship(app, noteUUID, response["Parent Project"].uuid);
+    }
+
+    // Add relationship
+    if (response["Add Relationship"]?.uuid) {
+      await plugin.addRelationshipByType(app, note, response["Add Relationship"]);
+    }
+
+    // Remove relationship
+    if (response["Remove Relationship"]) {
+      const relation = currentRelations.find(r => r.label === response["Remove Relationship"]);
+      if (relation) {
+        await plugin.removeRelationship(app, note, relation);
+      }
+    }
+
+    // === Auto-refresh related sections after changes ===
+    const domainTags = note.tags.filter(t => t.startsWith("d/"));
+    const summary = await this.updateAllRelatedSections(app, noteUUID, domainTags);
+
+    // === Test-friendly confirmation alert ===
+    await app.alert(
+      `✅ Tags updated for "${note.name}"\n` +
+      `Sections refreshed: ${summary.updatedSections}\n` +
+      `Total items updated: ${summary.totalItems}`
+    );
+
+    // === Loop if Continue was pressed ===
+    if (response.button === "Continue") {
+      await plugin.setNoteTags(app, noteUUID);
+    }
+  }, // end setNoteTags
+
+  // ===============================================================
+  // Helper: Get readable relationships for dropdown
+  // ===============================================================
+  getReadableRelationships: async function(app, note) {
+    const plugin = this;
+    const results = [];
+
+    // Parent relationships
+    const parents = await plugin.getParentNotes(app, note.uuid);
+    parents.forEach(p => results.push({ type: "parent", uuid: p.uuid, label: `(Parent) ${p.name}` }));
+
+    // Child relationships
+    const children = await plugin.getChildNotes(app, note.uuid);
+    children.forEach(c => results.push({ type: "child", uuid: c.uuid, label: `(Child) ${c.name}` }));
+
+    // Other r/* relationships
+    const noteIdTag = await plugin.getNoteIdTag(app, note);
+    const noteIdValue = noteIdTag.split("/")[1];
+    const allRNotes = await plugin.getFilteredNotes(app, "r");
+    const relatedNotes = allRNotes.filter(n =>
+      n.tags.some(t => t.endsWith(`/${noteIdValue}`))
+    );
+
+    for (const rel of relatedNotes) {
+      if (parents.some(p => p.uuid === rel.uuid) || children.some(c => c.uuid === rel.uuid)) continue;
+      results.push({ type: "other", uuid: rel.uuid, label: rel.name });
+    }
+
+    return results;
+  }, // end getReadableRelationships
+
+  // ===============================================================
+  // Helper: Add relationship with same rules as buildRelationship
+  // ===============================================================
+  addRelationshipByType: async function(app, note, relatedHandle) {
+    const plugin = this;
+    const relatedNote = await app.notes.find(relatedHandle.uuid);
+    const noteIdTag = await plugin.getNoteIdTag(app, note);
+    const relatedNoteIdTag = await plugin.getNoteIdTag(app, relatedNote);
+    const noteId = noteIdTag.split("/")[1];
+    const relatedNoteId = relatedNoteIdTag.split("/")[1];
+    const noteType = plugin.getNoteType(note);
+    const relatedType = plugin.getNoteType(relatedNote);
+
+    if (!noteType || !relatedType) return;
+
+    if (noteType.startsWith("project/")) {
+      await note.addTag(`r/${relatedType}/${relatedNoteId}`);
+    } else if (relatedType.startsWith("project/")) {
+      await relatedNote.addTag(`r/${noteType}/${noteId}`);
+    } else {
+      await note.addTag(`r/${relatedType}/${relatedNoteId}`);
+      await relatedNote.addTag(`r/${noteType}/${noteId}`);
+    }
+  }, // end addRelationshipByType
+
+  // ===============================================================
+  // Helper: Remove relationship cleanly
+  // ===============================================================
+  removeRelationship: async function(app, note, relation) {
+    const plugin = this;
+    const target = await app.notes.find(relation.uuid);
+    if (!target) return;
+
+    const noteIdTag = await plugin.getNoteIdTag(app, note);
+    const targetIdTag = await plugin.getNoteIdTag(app, target);
+    const noteId = noteIdTag.split("/")[1];
+    const targetId = targetIdTag.split("/")[1];
+
+    if (relation.type === "parent") {
+      await note.removeTag(`r/parent/${targetId}`);
+      await target.removeTag(`r/child/${noteId}`);
+    } else if (relation.type === "child") {
+      await note.removeTag(`r/child/${targetId}`);
+      await target.removeTag(`r/parent/${noteId}`);
+    } else {
+      // Remove from both sides if both have the tag
+      await note.removeTag(`r/${plugin.getNoteType(target)}/${targetId}`);
+      await target.removeTag(`r/${plugin.getNoteType(note)}/${noteId}`);
+    }
+  }, // end removeRelationship
 
 // =================================================================================================
 // =================================================================================================
@@ -956,14 +1148,26 @@
     // =============================================================================================
     // Calls buildRelationship to add relationships to note
     // =============================================================================================
-  "Build Relationship": async function(app, link) {
+    "Build Relationship": async function(app, link) {
       const uuidMatch = link.href?.match(/\/notes\/([a-f0-9-]+)$/);
       if (!uuidMatch) {
         await app.alert("❌ Invalid note link.");
         return;
       }
       await this.buildRelationship(app, uuidMatch[1]);
-    } // end Build Relationship
+    }, // end Build Relationship
+
+    // =============================================================================================
+    // Calls setNoteTags to manage tags on current note
+    // =============================================================================================
+    "Set Note Tags": async function(app, link) {
+      const uuidMatch = link.href?.match(/\/notes\/([a-f0-9-]+)$/);
+      if (!uuidMatch) {
+        await app.alert("❌ Invalid note link.");
+        return;
+      }
+      await this.setNoteTags(app, uuidMatch[1]);
+    }, // end Set Note Tags
   }, // end linkOption
 
 
@@ -980,6 +1184,13 @@
     "Build Relationship": async function(app, noteUUID) {
       await this.buildRelationship(app, noteUUID);
     }, // end Build Relationship
+
+    // =============================================================================================
+    // Calls setNoteTags to manage tags on current note
+    // =============================================================================================
+    "Set Note Tags": async function(app, noteUUID) {
+      await this.setNoteTags(app, noteUUID);
+    }, //end Set Note Tags
 
     // =============================================================================================
     // Update Note
