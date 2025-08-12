@@ -515,7 +515,7 @@
     // Helper: Get all related notes in readable form
     const currentRelations = await plugin.getReadableRelationships(app, note);
 
-    await app.alert("currentRelations: " + currentRelations); 
+    await app.alert("currentRelations: " + JSON.stringify(currentRelations)); 
 
     // Build prompt inputs
     const inputs = [];
@@ -547,7 +547,7 @@
       });
     }
 
-    await app.alert("Inputs: " + inputs); 
+    await app.alert("Inputs: " + JSON.stringify(inputs)); 
 
     // Show main prompt with two buttons
     const response = await app.prompt(`Set tags for "${note.name}"`, {
