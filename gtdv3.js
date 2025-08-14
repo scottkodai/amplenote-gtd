@@ -318,6 +318,7 @@
     return candidate;
   }, // end generateUniqueNoteIdTag
 
+/*
   // ===============================================================================================
   // Builds a relationship between two notes (one-way if a project note is involved,
   // two-way for all others)
@@ -370,6 +371,7 @@
 
     await app.alert(`✅ Linked "${note.name}" ↔ "${relatedNote.name}"`);
   }, // end buildRelationship
+*/
 
   // ===============================================================================================
   // Determines note type
@@ -1192,6 +1194,8 @@
 // =================================================================================================
 // =================================================================================================
   linkOption: {
+
+/*
     // =============================================================================================
     // Calls buildRelationship to add relationships to note
     // =============================================================================================
@@ -1203,11 +1207,12 @@
       }
       await this.buildRelationship(app, uuidMatch[1]);
     }, // end Build Relationship
+*/
 
     // =============================================================================================
     // Calls setNoteTags to manage tags on current note
     // =============================================================================================
-    "Set Note Tags": async function(app, link) {
+    "Update Tags": async function(app, link) {
       const uuidMatch = link.href?.match(/\/notes\/([a-f0-9-]+)$/);
       if (!uuidMatch) {
         await app.alert("❌ Invalid note link.");
@@ -1225,17 +1230,19 @@
 // =================================================================================================
   noteOption: {
 
+/*
     // =============================================================================================
     // Calls buildRelationship to add relationships to note
     // =============================================================================================
     "Build Relationship": async function(app, noteUUID) {
       await this.buildRelationship(app, noteUUID);
     }, // end Build Relationship
+*/
 
     // =============================================================================================
     // Calls setNoteTags to manage tags on current note
     // =============================================================================================
-    "Set Note Tags": async function(app, noteUUID) {
+    "Update Tags": async function(app, noteUUID) {
       //await app.alert("Getting ready to call setNoteTags");
       await this.setNoteTags(app, noteUUID);
     }, //end Set Note Tags
@@ -1284,6 +1291,7 @@
       );
     }, // end Update Note
 
+/*
     // =============================================================================================
     // Set Parent
     // This function is a placeholder for testing parent child relationships
@@ -1317,7 +1325,9 @@
         await app.alert(`Error: ${err.message}`);
       }
     }, // End Set Parent
+*/
 
+/*
     // =============================================================================================
     // Get note-id
     // This function returns the current note's note-id (and sets one if it doesn't exist yet)
@@ -1338,36 +1348,13 @@
       // Step 3: Show the result
       await app.alert(`Note ID for "${note.name}":\n${noteIdTag.replace("note-id/", "")}`);
     },  // end Get note-id
+*/
 
     // ===============================================================================================
     // Note option wrapper to run Tagging Cleanup manually
     // ===============================================================================================
-      "Run Tagging Cleanup": async function (app, noteUUID) {
-        await this.taggingCleanup(app);
-      }, // End Run Tagging Cleanup
-
-    // =============================================================================================
-    // Testing
-    // This function is a placeholder for unit testing global functions or any other testing
-    // =============================================================================================
-    "Testing": async function(app, noteUUID) {
-    const plugin = this;
-
-    // Get parent notes
-    const parents = await this.getParentNotes(app, noteUUID);
-    const parentList = parents.length
-      ? parents.map(n => `- **${n.name}**`).join("\n")
-      : "_(No parents)_";
-
-    // Get child notes
-    const children = await this.getChildNotes(app, noteUUID);
-    const childList = children.length
-      ? children.map(n => `- **${n.name}**`).join("\n")
-      : "_(No children)_";
-
-    // Show results in markdown
-    const md = `**Parents:**\n${parentList}\n\n**Children:**\n${childList}`;
-    await app.alert(md);
-    } // End Testing
+    "Run Tagging Cleanup": async function (app, noteUUID) {
+      await this.taggingCleanup(app);
+    } // End Run Tagging Cleanup
   } // end noteOption
 } // end plugin
