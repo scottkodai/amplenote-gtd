@@ -509,40 +509,48 @@
     const isProjectNote = note.tags.some(t => t.startsWith("project/"));
     const currentRelations = await plugin.getReadableRelationships(app, note);
 
-    // Build prompt inputs
     const inputs = [];
+
+    // If project note — add status & parent
     if (isProjectNote) {
       inputs.push({
         label: "Project Status",
         type: "select",
         options: [
-          "",
-          "project/focus",
-          "project/active",
-          "project/tracking",
-          "project/on-hold",
-          "project/future",
-          "project/someday",
-          "project/completed",
-          "project/canceled"
+          { label: "", value: "" },
+          { label: "project/focus", value: "project/focus" },
+          { label: "project/active", value: "project/active" },
+          { label: "project/tracking", value: "project/tracking" },
+          { label: "project/on-hold", value: "project/on-hold" },
+          { label: "project/future", value: "project/future" },
+          { label: "project/someday", value: "project/someday" },
+          { label: "project/completed", value: "project/completed" },
+          { label: "project/canceled", value: "project/canceled" }
         ]
       });
+
       inputs.push({ label: "Parent Project", type: "note" });
     }
 
+    // Add relationship
     inputs.push({ label: "Add Relationship", type: "note" });
 
+    // Remove relationship
     if (currentRelations.length > 0) {
       inputs.push({
         label: "Remove Relationship",
         type: "select",
-        options: ["", ...currentRelations.map(r => r.label)]
+        options: [
+          { label: "", value: "" },
+          ...currentRelations.map(r => ({ label: r.label, value: r.label }))
+        ]
       });
     }
 
-    await app.prompt("Inputs:\n" + JSON.stringify(inputs));
+    // Debug: show built inputs before prompt
+    await app.alert("Inputs:\n" + JSON.stringify(inputs, null, 2));
 
-    // Prompt with just Continue as extra action
+    // Prompt with Continue action
     const result = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
       actions: [
@@ -550,24 +558,21 @@
       ]
     });
 
-    if (!result) return; // user canceled
+    if (!result) return; // cancel
 
-    // Extract action (last element if action clicked, otherwise undefined for Submit)
     const actionValue = result[result.length - 1];
     const actionWasContinue = actionValue === "continue";
 
-    // Map results back to inputs
-    let inputIndex = 0;
-    const getNext = () => result[inputIndex++];
+    // Parse values in order
+    let idx = 0;
+    const getNext = () => result[idx++];
 
     const projectStatusValue = isProjectNote ? getNext() : null;
     const parentProjectValue = isProjectNote ? getNext() : null;
     const addRelationshipValue = getNext();
     const removeRelationshipValue = currentRelations.length > 0 ? getNext() : null;
 
-    // === Process changes ===
-
-    // Project status update
+    // === Apply changes ===
     if (isProjectNote && projectStatusValue) {
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
       if (oldStatus) await note.removeTag(oldStatus);
@@ -581,17 +586,14 @@
       }
     }
 
-    // Parent project setting
     if (isProjectNote && parentProjectValue?.uuid) {
       await plugin.setParentChildRelationship(app, noteUUID, parentProjectValue.uuid);
     }
 
-    // Add relationship
     if (addRelationshipValue?.uuid) {
       await plugin.addRelationshipByType(app, note, addRelationshipValue);
     }
 
-    // Remove relationship
     if (removeRelationshipValue) {
       const relation = currentRelations.find(r => r.label === removeRelationshipValue);
       if (relation) {
@@ -599,18 +601,16 @@
       }
     }
 
-    // === Auto-refresh related sections after changes ===
+    // Refresh related sections
     const domainTags = note.tags.filter(t => t.startsWith("d/"));
     const summary = await this.updateAllRelatedSections(app, noteUUID, domainTags);
 
-    // Confirmation alert
     await app.alert(
       `✅ Tags updated for "${note.name}"\n` +
       `Sections refreshed: ${summary.updatedSections}\n` +
       `Total items updated: ${summary.totalItems}`
     );
 
-    // Loop if Continue was pressed
     if (actionWasContinue) {
       await this.setNoteTags(app, noteUUID);
     }
