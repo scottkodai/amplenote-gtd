@@ -677,14 +677,21 @@
   addRelationshipByType: async function(app, note, relatedHandle) {
     const plugin = this;
     const relatedNote = await app.notes.find(relatedHandle.uuid);
-    const noteIdTag = await plugin.getNoteIdTag(app, note);
-    const relatedNoteIdTag = await plugin.getNoteIdTag(app, relatedNote);
-    const noteId = noteIdTag.split("/")[1];
-    const relatedNoteId = relatedNoteIdTag.split("/")[1];
+
     const noteType = plugin.getNoteType(note);
     const relatedType = plugin.getNoteType(relatedNote);
 
-    if (!noteType || !relatedType) return;
+    // 🚫 Prevent adding two-way relationship between two projects
+    if (noteType.startsWith("project/") && relatedType.startsWith("project/")) {
+      await app.alert("❌ Project-to-project relationships must be set as Parent/Child.");
+      return;
+    }
+
+    const noteIdTag = await plugin.getNoteIdTag(app, note);
+    const relatedNoteIdTag = await plugin.getNoteIdTag(app, relatedNote);
+
+    const noteId = noteIdTag.split("/")[1];
+    const relatedNoteId = relatedNoteIdTag.split("/")[1];
 
     if (noteType.startsWith("project/")) {
       await note.addTag(`r/${relatedType}/${relatedNoteId}`);
