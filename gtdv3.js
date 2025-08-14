@@ -540,6 +540,8 @@
       });
     }
 
+    await app.prompt("Inputs:\n" + JSON.stringify(inputs));
+
     // Prompt with just Continue as extra action
     const result = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
