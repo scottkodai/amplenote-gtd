@@ -623,25 +623,47 @@
     const plugin = this;
     const results = [];
 
-    // Parent relationships
+    // === Parent relationships ===
     const parents = await plugin.getParentNotes(app, note.uuid);
     parents.forEach(p => results.push({ type: "parent", uuid: p.uuid, label: `(Parent) ${p.name}` }));
 
-    // Child relationships
+    // === Child relationships ===
     const children = await plugin.getChildNotes(app, note.uuid);
     children.forEach(c => results.push({ type: "child", uuid: c.uuid, label: `(Child) ${c.name}` }));
 
-    // Other r/* relationships
+    // === Direct r/* relationships from this note (excluding parent/child) ===
+    const directRTags = note.tags.filter(t =>
+      t.startsWith("r/") &&
+      !t.startsWith("r/parent/") &&
+      !t.startsWith("r/child/")
+    );
+
+    for (const tag of directRTags) {
+      const [, type, targetId] = tag.split("/");
+      const matches = await app.filterNotes({ tag: `note-id/${targetId}` });
+      if (matches.length > 0) {
+        const handle = plugin.normalizeNoteHandle(matches[0]);
+        // Avoid duplicates
+        if (!results.some(r => r.uuid === handle.uuid)) {
+          results.push({ type: "other", uuid: handle.uuid, label: handle.name });
+        }
+      }
+    }
+
+    // === Reverse lookup: find notes pointing to this one ===
     const noteIdTag = await plugin.getNoteIdTag(app, note);
     const noteIdValue = noteIdTag.split("/")[1];
-    const allRNotes = await plugin.getFilteredNotes(app, "r");
-    const relatedNotes = allRNotes.filter(n =>
-      n.tags.some(t => t.endsWith(`/${noteIdValue}`))
+
+    let allNotes = await app.filterNotes({ tag: "^archive,^exclude" });
+    const relatedNotes = allNotes.filter(n =>
+      n.tags.some(t => t.startsWith("r/") && t.endsWith(`/${noteIdValue}`))
     );
 
     for (const rel of relatedNotes) {
       if (parents.some(p => p.uuid === rel.uuid) || children.some(c => c.uuid === rel.uuid)) continue;
-      results.push({ type: "other", uuid: rel.uuid, label: rel.name });
+      if (!results.some(r => r.uuid === rel.uuid)) {
+        results.push({ type: "other", uuid: rel.uuid, label: rel.name });
+      }
     }
 
     return results;
