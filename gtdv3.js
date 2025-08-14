@@ -518,14 +518,14 @@
         type: "select",
         options: [
           { label: "", value: "" },
-          { label: "project/focus", value: "project/focus" },
-          { label: "project/active", value: "project/active" },
-          { label: "project/tracking", value: "project/tracking" },
-          { label: "project/on-hold", value: "project/on-hold" },
-          { label: "project/future", value: "project/future" },
-          { label: "project/someday", value: "project/someday" },
-          { label: "project/completed", value: "project/completed" },
-          { label: "project/canceled", value: "project/canceled" }
+          { label: "Focus", value: "project/focus" },
+          { label: "Active", value: "project/active" },
+          { label: "Tracking", value: "project/tracking" },
+          { label: "On-hold", value: "project/on-hold" },
+          { label: "Future", value: "project/future" },
+          { label: "Someday", value: "project/someday" },
+          { label: "Completed", value: "project/completed" },
+          { label: "Canceled", value: "project/canceled" }
         ]
       });
 
@@ -548,7 +548,7 @@
     }
 
     // Debug: show built inputs before prompt
-    await app.alert("Inputs:\n" + JSON.stringify(inputs, null, 2));
+    // await app.alert("Inputs:\n" + JSON.stringify(inputs, null, 2));
 
     // Prompt with Continue action
     const result = await app.prompt(`Set tags for "${note.name}"`, {
@@ -605,11 +605,13 @@
     const domainTags = note.tags.filter(t => t.startsWith("d/"));
     const summary = await this.updateAllRelatedSections(app, noteUUID, domainTags);
 
+/*
     await app.alert(
       `✅ Tags updated for "${note.name}"\n` +
       `Sections refreshed: ${summary.updatedSections}\n` +
       `Total items updated: ${summary.totalItems}`
     );
+*/
 
     if (actionWasContinue) {
       await this.setNoteTags(app, noteUUID);
