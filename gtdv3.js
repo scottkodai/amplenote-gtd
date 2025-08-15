@@ -1241,6 +1241,28 @@
       // Verify
       const updatedNote = await app.notes.find(noteUUID);
       await app.alert(`Ending tags: ${updatedNote.tags.join(", ")}`);
-    } // end iOS Tag Update Test
+    }, // end iOS Tag Update Test
+
+    // ===============================================================================================
+    // Test function to identify bug in iOS app
+    // ===============================================================================================
+    "Test Two Adds": async function (app, noteUUID) {
+      const note = await app.notes.find(noteUUID);
+      if (!note) {
+        await app.alert("Note not found");
+        return;
+      }
+
+      await app.alert("Before: " + JSON.stringify(note.tags));
+
+      // First add
+      await note.addTag("test/tag1");
+
+      // Second add
+      await note.addTag("test/tag2");
+
+      const updatedNote = await app.notes.find(noteUUID);
+      await app.alert("After: " + JSON.stringify(updatedNote.tags));
+    } // end Test Two Adds
   } // end noteOption
 } // end plugin
