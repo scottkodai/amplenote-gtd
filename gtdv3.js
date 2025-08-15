@@ -505,7 +505,7 @@
 
     // === Process changes ===
 
-    // === Project status update (add first, verify, then remove old) ===
+    // === Project status update (add first, verify w/retry, then remove old) ===
     if (isProjectNote && projectStatus) {
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
 
@@ -518,13 +518,18 @@
         await note.addTag(projectStatus);
       }
 
-      // Step 2: Refetch note to verify new tag
-      note = await app.notes.find(noteUUID);
-      const hasNewTag = note.tags.some(t =>
-        projectStatus === "project/completed"
-          ? t.startsWith("project/completed/")
-          : t === projectStatus
-      );
+      // Step 2: Refetch note and verify new tag (retry for iOS delay)
+      let hasNewTag = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        note = await app.notes.find(noteUUID);
+        hasNewTag = note.tags.some(t =>
+          projectStatus === "project/completed"
+            ? t.startsWith("project/completed/")
+            : t === projectStatus
+        );
+        if (hasNewTag) break;
+        await new Promise(resolve => setTimeout(resolve, 100)); // wait 100ms
+      }
 
       if (!hasNewTag) {
         await app.alert("⚠️ Failed to add new project status tag. Skipping status change.");
