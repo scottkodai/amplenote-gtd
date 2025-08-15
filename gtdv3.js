@@ -505,22 +505,38 @@
 
     // === Process changes ===
 
-    // Project status update (with iOS-safe refetch)
+    // === Project status update (add first, verify, then remove old) ===
     if (isProjectNote && projectStatus) {
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
-      if (oldStatus) {
-        await note.removeTag(oldStatus);
 
-        // 🔹 Refetch note before adding new tag (fix for iOS tag loss)
-        note = await app.notes.find(noteUUID);
-      }
-
+      // Step 1: Add new tag
       if (projectStatus === "project/completed") {
         const now = new Date();
         const datestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
         await note.addTag(`project/completed/${datestamp}`);
       } else if (projectStatus.trim()) {
         await note.addTag(projectStatus);
+      }
+
+      // Step 2: Refetch note to verify new tag
+      note = await app.notes.find(noteUUID);
+      const hasNewTag = note.tags.some(t =>
+        projectStatus === "project/completed"
+          ? t.startsWith("project/completed/")
+          : t === projectStatus
+      );
+
+      if (!hasNewTag) {
+        await app.alert("⚠️ Failed to add new project status tag. Skipping status change.");
+      } else {
+        // Step 3: Remove old tag if different
+        if (
+          oldStatus &&
+          oldStatus !== projectStatus &&
+          !oldStatus.startsWith(`${projectStatus}/`)
+        ) {
+          await note.removeTag(oldStatus);
+        }
       }
     }
 
