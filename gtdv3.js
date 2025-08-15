@@ -458,7 +458,7 @@
     // Helper: Get all related notes in readable form
     const currentRelations = await plugin.getReadableRelationships(app, note);
 
-    // Build prompt inputs (Amplenote format)
+    // Build prompt inputs
     const inputs = [];
     if (isProjectNote) {
       inputs.push({
@@ -492,7 +492,7 @@
       });
     }
 
-    // Show prompt with custom Continue action
+    // Show main prompt with Continue option
     const response = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
       actions: [
@@ -501,11 +501,9 @@
     });
     if (!response) return; // cancelled
 
-    const [ projectStatus, parentNote, addRel, removeRel, actionValue ] = response;
+    const [projectStatus, parentProject, addRel, removeRel, actionChoice] = response;
 
-    // === Process changes ===
-
-    // === Project status update (add first, verify w/retry, then remove old) ===
+    // === Project status update with iOS-safe retry ===
     if (isProjectNote && projectStatus) {
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
 
@@ -528,32 +526,44 @@
             : t === projectStatus
         );
         if (hasNewTag) break;
-        await new Promise(resolve => setTimeout(resolve, 100)); // wait 100ms
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       if (!hasNewTag) {
         await app.alert("⚠️ Failed to add new project status tag. Skipping status change.");
       } else {
-        // Step 3: Remove old tag if different
+        // Step 3: Refetch before removal
+        note = await app.notes.find(noteUUID);
+
+        // Step 4: Remove old tag with retry
         if (
           oldStatus &&
           oldStatus !== projectStatus &&
           !oldStatus.startsWith(`${projectStatus}/`)
         ) {
-          await note.removeTag(oldStatus);
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await note.removeTag(oldStatus);
+            // Recheck
+            note = await app.notes.find(noteUUID);
+            const stillHasOld = note.tags.includes(oldStatus);
+            if (!stillHasOld) break;
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         }
       }
     }
 
     // Parent project setting
-    if (isProjectNote && parentNote?.uuid) {
-      await plugin.setParentChildRelationship(app, noteUUID, parentNote.uuid);
+    if (isProjectNote && parentProject?.uuid) {
+      await plugin.setParentChildRelationship(app, noteUUID, parentProject.uuid);
     }
 
-    // Add & Remove relationship — run sequentially to avoid iOS skip bug
+    // Add relationship
     if (addRel?.uuid) {
       await plugin.addRelationshipByType(app, note, addRel);
     }
+
+    // Remove relationship
     if (removeRel) {
       const relation = currentRelations.find(r => r.label === removeRel);
       if (relation) {
@@ -561,20 +571,18 @@
       }
     }
 
-    // Refetch note before updating sections (fix for iOS stale tags)
-    note = await app.notes.find(noteUUID);
+    // === Auto-refresh related sections after changes ===
     const domainTags = note.tags.filter(t => t.startsWith("d/"));
     const summary = await this.updateAllRelatedSections(app, noteUUID, domainTags);
 
-    // Confirmation alert
     await app.alert(
       `✅ Tags updated for "${note.name}"\n` +
       `Sections refreshed: ${summary.updatedSections}\n` +
       `Total items updated: ${summary.totalItems}`
     );
 
-    // Loop if Continue was pressed
-    if (actionValue === "continue") {
+    // === Loop if Continue was pressed ===
+    if (actionChoice === "continue") {
       await plugin.setNoteTags(app, noteUUID);
     }
   }, // end setNoteTags
