@@ -318,61 +318,6 @@
     return candidate;
   }, // end generateUniqueNoteIdTag
 
-/*
-  // ===============================================================================================
-  // Builds a relationship between two notes (one-way if a project note is involved,
-  // two-way for all others)
-  // Called from: 
-  // ===============================================================================================
-  buildRelationship: async function (app, noteUUID) {
-    const plugin = this;
-
-    // Load current note
-    const note = await app.notes.find(noteUUID);
-    if (!note) {
-      await app.alert("❌ Could not find the current note.");
-      return;
-    }
-
-    // Step 1: Choose related note
-    const relatedNoteHandle = await app.prompt("Select related note", {
-      inputs: [{ type: "note", label: "Related Note" }]
-    });
-    if (!relatedNoteHandle || !relatedNoteHandle.uuid) return; // cancelled
-
-    const relatedNote = await app.notes.find(relatedNoteHandle.uuid);
-
-    // Step 2: Ensure both have note-ids
-    const noteIdTag = await plugin.getNoteIdTag(app, note);
-    const relatedNoteIdTag = await plugin.getNoteIdTag(app, relatedNote);
-
-    const noteId = noteIdTag.split("/")[1];
-    const relatedNoteId = relatedNoteIdTag.split("/")[1];
-
-    // Step 3: Determine note types
-    const noteType = this.getNoteType(note);
-    const relatedType = this.getNoteType(relatedNote);
-
-    if (!noteType || !relatedType) {
-      await app.alert("❌ Could not determine note type for one or both notes.");
-      return;
-    }
-
-    // Step 4: Apply tags (project = one-way)
-    if (noteType.startsWith("project/")) {
-      await note.addTag(`r/${relatedType}/${relatedNoteId}`);
-    } else if (relatedType.startsWith("project/")) {
-      await relatedNote.addTag(`r/${noteType}/${noteId}`);
-    } else {
-      // Two-way for all other combinations
-      await note.addTag(`r/${relatedType}/${relatedNoteId}`);
-      await relatedNote.addTag(`r/${noteType}/${noteId}`);
-    }
-
-    await app.alert(`✅ Linked "${note.name}" ↔ "${relatedNote.name}"`);
-  }, // end buildRelationship
-*/
-
   // ===============================================================================================
   // Determines note type
   // Called from: 
@@ -502,18 +447,19 @@
   // ===============================================================
   setNoteTags: async function(app, noteUUID) {
     const plugin = this;
-    const note = await app.notes.find(noteUUID);
+    let note = await app.notes.find(noteUUID);
     if (!note) {
       await app.alert("❌ Could not find the current note.");
       return;
     }
 
     const isProjectNote = note.tags.some(t => t.startsWith("project/"));
+
+    // Helper: Get all related notes in readable form
     const currentRelations = await plugin.getReadableRelationships(app, note);
 
+    // Build prompt inputs (Amplenote format)
     const inputs = [];
-
-    // If project note — add status & parent
     if (isProjectNote) {
       inputs.push({
         label: "Project Status",
@@ -523,21 +469,18 @@
           { label: "Focus", value: "project/focus" },
           { label: "Active", value: "project/active" },
           { label: "Tracking", value: "project/tracking" },
-          { label: "On-hold", value: "project/on-hold" },
+          { label: "On Hold", value: "project/on-hold" },
           { label: "Future", value: "project/future" },
           { label: "Someday", value: "project/someday" },
           { label: "Completed", value: "project/completed" },
           { label: "Canceled", value: "project/canceled" }
         ]
       });
-
       inputs.push({ label: "Parent Project", type: "note" });
     }
 
-    // Add relationship
     inputs.push({ label: "Add Relationship", type: "note" });
 
-    // Remove relationship
     if (currentRelations.length > 0) {
       inputs.push({
         label: "Remove Relationship",
@@ -549,74 +492,69 @@
       });
     }
 
-    // Debug: show built inputs before prompt
-    // await app.alert("Inputs:\n" + JSON.stringify(inputs, null, 2));
-
-    // Prompt with Continue action
-    const result = await app.prompt(`Set tags for "${note.name}"`, {
+    // Show prompt with custom Continue action
+    const response = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
       actions: [
         { label: "Continue", value: "continue" }
       ]
     });
+    if (!response) return; // cancelled
 
-    if (!result) return; // cancel
+    const [ projectStatus, parentNote, addRel, removeRel, actionValue ] = response;
 
-    const actionValue = result[result.length - 1];
-    const actionWasContinue = actionValue === "continue";
+    // === Process changes ===
 
-    // Parse values in order
-    let idx = 0;
-    const getNext = () => result[idx++];
-
-    const projectStatusValue = isProjectNote ? getNext() : null;
-    const parentProjectValue = isProjectNote ? getNext() : null;
-    const addRelationshipValue = getNext();
-    const removeRelationshipValue = currentRelations.length > 0 ? getNext() : null;
-
-    // === Apply changes ===
-    if (isProjectNote && projectStatusValue) {
+    // Project status update (with iOS-safe refetch)
+    if (isProjectNote && projectStatus) {
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
-      if (oldStatus) await note.removeTag(oldStatus);
+      if (oldStatus) {
+        await note.removeTag(oldStatus);
 
-      if (projectStatusValue === "project/completed") {
+        // 🔹 Refetch note before adding new tag (fix for iOS tag loss)
+        note = await app.notes.find(noteUUID);
+      }
+
+      if (projectStatus === "project/completed") {
         const now = new Date();
         const datestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
         await note.addTag(`project/completed/${datestamp}`);
-      } else {
-        await note.addTag(projectStatusValue);
+      } else if (projectStatus.trim()) {
+        await note.addTag(projectStatus);
       }
     }
 
-    if (isProjectNote && parentProjectValue?.uuid) {
-      await plugin.setParentChildRelationship(app, noteUUID, parentProjectValue.uuid);
+    // Parent project setting
+    if (isProjectNote && parentNote?.uuid) {
+      await plugin.setParentChildRelationship(app, noteUUID, parentNote.uuid);
     }
 
-    if (addRelationshipValue?.uuid) {
-      await plugin.addRelationshipByType(app, note, addRelationshipValue);
+    // Add & Remove relationship — run sequentially to avoid iOS skip bug
+    if (addRel?.uuid) {
+      await plugin.addRelationshipByType(app, note, addRel);
     }
-
-    if (removeRelationshipValue) {
-      const relation = currentRelations.find(r => r.label === removeRelationshipValue);
+    if (removeRel) {
+      const relation = currentRelations.find(r => r.label === removeRel);
       if (relation) {
         await plugin.removeRelationship(app, note, relation);
       }
     }
 
-    // Refresh related sections
+    // Refetch note before updating sections (fix for iOS stale tags)
+    note = await app.notes.find(noteUUID);
     const domainTags = note.tags.filter(t => t.startsWith("d/"));
     const summary = await this.updateAllRelatedSections(app, noteUUID, domainTags);
 
-/*
+    // Confirmation alert
     await app.alert(
       `✅ Tags updated for "${note.name}"\n` +
       `Sections refreshed: ${summary.updatedSections}\n` +
       `Total items updated: ${summary.totalItems}`
     );
-*/
 
-    if (actionWasContinue) {
-      await this.setNoteTags(app, noteUUID);
+    // Loop if Continue was pressed
+    if (actionValue === "continue") {
+      await plugin.setNoteTags(app, noteUUID);
     }
   }, // end setNoteTags
 
@@ -1195,20 +1133,6 @@
 // =================================================================================================
   linkOption: {
 
-/*
-    // =============================================================================================
-    // Calls buildRelationship to add relationships to note
-    // =============================================================================================
-    "Build Relationship": async function(app, link) {
-      const uuidMatch = link.href?.match(/\/notes\/([a-f0-9-]+)$/);
-      if (!uuidMatch) {
-        await app.alert("❌ Invalid note link.");
-        return;
-      }
-      await this.buildRelationship(app, uuidMatch[1]);
-    }, // end Build Relationship
-*/
-
     // =============================================================================================
     // Calls setNoteTags to manage tags on current note
     // =============================================================================================
@@ -1229,15 +1153,6 @@
 // =================================================================================================
 // =================================================================================================
   noteOption: {
-
-/*
-    // =============================================================================================
-    // Calls buildRelationship to add relationships to note
-    // =============================================================================================
-    "Build Relationship": async function(app, noteUUID) {
-      await this.buildRelationship(app, noteUUID);
-    }, // end Build Relationship
-*/
 
     // =============================================================================================
     // Calls setNoteTags to manage tags on current note
@@ -1290,65 +1205,6 @@
         `Total items updated: ${summary.totalItems}`
       );
     }, // end Update Note
-
-/*
-    // =============================================================================================
-    // Set Parent
-    // This function is a placeholder for testing parent child relationships
-    // =============================================================================================
-    "Set Parent": async function(app, noteUUID) {
-    const plugin = this;
-
-    const result = await app.prompt("Select the parent note:", {
-        inputs: [
-          {
-            label: "Parent Note",
-            type: "note"
-          }
-        ]
-      });
-
-      if (!result) return; // user cancelled
-
-      // When only one input is given, result will be the value itself (not an array)
-      const parentHandle = result;
-
-      if (!parentHandle || !parentHandle.uuid) {
-        await app.alert("No note selected.");
-        return;
-      }
-
-      try {
-        await plugin.setParentChildRelationship(app, noteUUID, parentHandle.uuid);
-        await app.alert("Parent/child relationship established.");
-      } catch (err) {
-        await app.alert(`Error: ${err.message}`);
-      }
-    }, // End Set Parent
-*/
-
-/*
-    // =============================================================================================
-    // Get note-id
-    // This function returns the current note's note-id (and sets one if it doesn't exist yet)
-    // =============================================================================================
-    "Get note-id": async function (app, noteUUID) {
-      const plugin = this;
-
-      // Step 1: Get the current note
-      const note = await app.notes.find(noteUUID);
-      if (!note) {
-        await app.alert("❌ Could not find the note.");
-        return;
-      }
-
-      // Step 2: Get or create the note-id tag
-      const noteIdTag = await plugin.getNoteIdTag(app, note);
-
-      // Step 3: Show the result
-      await app.alert(`Note ID for "${note.name}":\n${noteIdTag.replace("note-id/", "")}`);
-    },  // end Get note-id
-*/
 
     // ===============================================================================================
     // Note option wrapper to run Tagging Cleanup manually
