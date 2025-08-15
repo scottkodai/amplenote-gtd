@@ -445,9 +445,6 @@
   // ===============================================================
   // setNoteTags: function to allow user to manage tags via prompt
   // ===============================================================
-  // ===============================================================
-  // setNoteTags: function to allow user to manage tags via prompt
-  // ===============================================================
   setNoteTags: async function(app, noteUUID) {
     const plugin = this;
     const note = await app.notes.find(noteUUID);
@@ -497,15 +494,9 @@
       });
     }
 
-    // Debug: show built inputs before prompt
-    // await app.alert("Inputs:\n" + JSON.stringify(inputs, null, 2));
-
-    // Prompt with Continue action
     const result = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
-      actions: [
-        { label: "Continue", value: "continue" }
-      ]
+      actions: [{ label: "Continue", value: "continue" }]
     });
 
     if (!result) return; // cancel
@@ -513,41 +504,61 @@
     const actionValue = result[result.length - 1];
     const actionWasContinue = actionValue === "continue";
 
-    // Parse values in order
+    // Parse results into changes object
     let idx = 0;
     const getNext = () => result[idx++];
 
-    const projectStatusValue = isProjectNote ? getNext() : null;
-    const parentProjectValue = isProjectNote ? getNext() : null;
-    const addRelationshipValue = getNext();
-    const removeRelationshipValue = currentRelations.length > 0 ? getNext() : null;
+    const changes = {
+      projectStatus: isProjectNote ? getNext() : null,
+      parentProject: isProjectNote ? getNext() : null,
+      addRelationship: getNext(),
+      removeRelationship: currentRelations.length > 0 ? getNext() : null
+    };
+
+    // Single awaited call to apply all changes
+    await plugin.applyNoteTagChanges(app, noteUUID, changes, currentRelations);
+
+    // Loop if Continue was pressed
+    if (actionWasContinue) {
+      await plugin.setNoteTags(app, noteUUID);
+    }
+  }, // end setNoteTags
+
+  // ===============================================================
+  // applyNoteTagChanges: apply all changes in one awaited call
+  // ===============================================================
+  applyNoteTagChanges: async function(app, noteUUID, changes, currentRelations) {
+    const plugin = this;
+    const note = await app.notes.find(noteUUID);
+    const isProjectNote = note.tags.some(t => t.startsWith("project/"));
 
     // Project status update
-    if (isProjectNote && projectStatusValue) {
+    if (isProjectNote && changes.projectStatus) {
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
-      if (oldStatus) {
-        await app.removeNoteTag(noteUUID, oldStatus);
-      }
+      if (oldStatus) await note.removeTag(oldStatus);
 
-      if (projectStatusValue === "project/completed") {
+      if (changes.projectStatus === "project/completed") {
         const now = new Date();
         const datestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
-        await app.addNoteTag(noteUUID, `project/completed/${datestamp}`);
+        await note.addTag(`project/completed/${datestamp}`);
       } else {
-        await app.addNoteTag(noteUUID, projectStatusValue);
+        await note.addTag(changes.projectStatus);
       }
     }
 
-    if (isProjectNote && parentProjectValue?.uuid) {
-      await plugin.setParentChildRelationship(app, noteUUID, parentProjectValue.uuid);
+    // Parent project setting
+    if (isProjectNote && changes.parentProject?.uuid) {
+      await plugin.setParentChildRelationship(app, noteUUID, changes.parentProject.uuid);
     }
 
-    if (addRelationshipValue?.uuid) {
-      await plugin.addRelationshipByType(app, note, addRelationshipValue);
+    // Add relationship
+    if (changes.addRelationship?.uuid) {
+      await plugin.addRelationshipByType(app, note, changes.addRelationship);
     }
 
-    if (removeRelationshipValue) {
-      const relation = currentRelations.find(r => r.label === removeRelationshipValue);
+    // Remove relationship
+    if (changes.removeRelationship) {
+      const relation = currentRelations.find(r => r.label === changes.removeRelationship);
       if (relation) {
         await plugin.removeRelationship(app, note, relation);
       }
@@ -555,20 +566,8 @@
 
     // Refresh related sections
     const domainTags = note.tags.filter(t => t.startsWith("d/"));
-    const summary = await this.updateAllRelatedSections(app, noteUUID, domainTags);
-
-    /*
-    await app.alert(
-      `✅ Tags updated for "${note.name}"\n` +
-      `Sections refreshed: ${summary.updatedSections}\n` +
-      `Total items updated: ${summary.totalItems}`
-    );
-    */
-
-    if (actionWasContinue) {
-      await this.setNoteTags(app, noteUUID);
-    }
-  }, // end setNoteTags
+    await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+  }, //end applyNoteTagChanges
 
   // ===============================================================
   // Helper: Get readable relationships for dropdown
