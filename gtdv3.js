@@ -142,7 +142,7 @@
 
     // Helper: extract the unique note-id value from a note's tags
     const getNoteId = note =>
-      note.tags.find(t => t.startsWith("note-id/"))?.replace("note-id/", "") || null;
+      note.tags.find(t => t.startsWith("note-id/"))?.split("/")[1] || null;
 
     // Expand a note into its full hierarchy (ancestors + descendants)
     const expandHierarchy = async (note, seen = new Set()) => {
@@ -158,16 +158,18 @@
         const noteId = getNoteId(current);
         if (!noteId) continue;
 
-        // Expand upward to parents
+        // ===== Expand upward to parents (child has parent/<id> tags) =====
         const parentIds = current.tags
           .filter(t => t.startsWith("parent/"))
           .map(t => t.split("/")[1]);
+
         for (const pid of parentIds) {
+          // Find the parent note by its note-id/<pid>
           const parents = await this.getFilteredNotes(app, `note-id/${pid}`);
           for (const p of parents) stack.push(p);
         }
 
-        // Expand downward to children
+        // ===== Expand downward to children (parent is referenced by r/parent/<id> on the child) =====
         if (includeChildren) {
           const children = await this.getFilteredNotes(app, `r/parent/${noteId}`);
           for (const c of children) stack.push(c);
@@ -176,14 +178,14 @@
       return [...results];
     };
 
-    // Expand all baseNotes into their full hierarchies
+    // Expand all baseNotes into their full hierarchies, then dedupe by uuid
     let expandedNotes = [];
     const seenExpand = new Set();
     for (const note of baseNotes) {
       const fullSet = await expandHierarchy(note, seenExpand);
       expandedNotes.push(...fullSet);
     }
-    expandedNotes = [...new Map(expandedNotes.map(n => [n.uuid, n])).values()]; // dedupe
+    expandedNotes = [...new Map(expandedNotes.map(n => [n.uuid, n])).values()];
 
     // Recursive renderer: turns a note (and its children) into markdown
     const renderProject = async (note, indentLevel = 0, visited = new Set()) => {
@@ -195,32 +197,48 @@
 
       let md = `${indent}- [${handle.name}](${handle.url})\n`;
 
+      // Placeholder for weeklyReview extras (next feature on your roadmap)
       if (format === "weeklyReview") {
-        md += `${indent}    - Status: TBD\n`; // placeholder
+        md += `${indent}    - Status: TBD\n`;
+        // md += `${indent}    - Last Updated: TBD\n`;
+        // md += `${indent}    - Open Tasks: TBD\n`;
       }
 
       if (includeChildren) {
         const noteId = getNoteId(note);
-        const children = await this.getFilteredNotes(app, `r/parent/${noteId}`);
-        const sorted = children.sort((a, b) => a.name.localeCompare(b.name));
-        for (const c of sorted) {
-          md += await renderProject(c, indentLevel + 1, new Set(visited));
+        if (noteId) {
+          // Children are notes tagged r/parent/<this note-id>
+          const children = await this.getFilteredNotes(app, `r/parent/${noteId}`);
+          const sorted = children.sort((a, b) => a.name.localeCompare(b.name));
+          for (const c of sorted) {
+            // Use a fresh copy of visited so a multi-parent child can appear under each parent
+            md += await renderProject(c, indentLevel + 1, new Set(visited));
+          }
         }
       }
       return md;
     };
 
-    // Helper: find root projects (those without a parent in the expanded set)
-    const getRoots = (notes) => {
+    // Helper: find root projects (those without a parent present in the expanded set)
+    // Important fix: compare child "parent/<id>" against other notes' "note-id/<id>"
+    const getRoots = (notes, expanded) => {
+      // Build a fast lookup of note-id -> true for all notes in 'expanded'
+      const expandedNoteIds = new Set(
+        expanded.map(en => en.tags.find(t => t.startsWith("note-id/"))?.split("/")[1]).filter(Boolean)
+      );
+
       return notes.filter(n => {
         const parentIds = n.tags
           .filter(t => t.startsWith("parent/"))
           .map(t => t.split("/")[1]);
-        // Root if no parents OR none of its parents are in expanded set
-        return parentIds.length === 0 || !expandedNotes.some(en => {
-          const enId = getNoteId(en);
-          return parentIds.includes(enId);
-        });
+
+        // Standalone (no parent tags) => root
+        if (parentIds.length === 0) return true;
+
+        // If ANY of its parents exist in the expanded set, it's NOT a root
+        const hasParentInSet = parentIds.some(pid => expandedNoteIds.has(pid));
+
+        return !hasParentInSet;
       });
     };
 
@@ -231,13 +249,13 @@
       for (const status of projectStatuses) {
         md += `- ${status.label}\n`;
 
-        // Only projects with this status
+        // Filter only projects with this status tag
         const statusProjects = expandedNotes.filter(n => n.tags.includes(status.tag));
 
-        // Only render roots for this status
-        const roots = getRoots(statusProjects);
+        // Roots for this status only (child notes will render via recursion)
+        const roots = getRoots(statusProjects, expandedNotes);
 
-        // Sort roots (alphabetical or by completed date)
+        // Sort roots appropriately
         if (status.tag === "project/completed" && sortCompletedByDate) {
           roots.sort((a, b) => {
             const ta = a.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
@@ -249,18 +267,19 @@
         }
 
         if (roots.length === 0) {
-          md += `    - *No matching projects*\n`;
+          md += `    - *No matching projects*\n\n`;
         } else {
           for (const proj of roots) {
             md += await renderProject(proj, 1);
           }
+          md += `\n`;
         }
-        md += "\n";
       }
 
     // ========== FLAT MODE (and WEEKLY REVIEW) ==========
     } else if (groupByStatus === "flat" || groupByStatus === "weeklyReview") {
-      const roots = getRoots(expandedNotes).sort((a, b) => a.name.localeCompare(b.name));
+      // Compute roots across the full expanded set
+      const roots = getRoots(expandedNotes, expandedNotes).sort((a, b) => a.name.localeCompare(b.name));
       for (const proj of roots) {
         md += await renderProject(proj, 0);
       }
