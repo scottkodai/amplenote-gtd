@@ -95,9 +95,13 @@
     const plugin = this;
     const allTasks = [];
 
-    const notes = await plugin.getFilteredNotes(app, baseTag, domainTags);
+    const noteHandles = await plugin.getFilteredNotes(app, baseTag, domainTags);
 
-    for (const note of notes) {
+    for (const handle of noteHandles) {
+      // Need the full Note object to call .tasks()
+      const note = await app.notes.find(handle.uuid);
+      if (!note) continue;
+
       const noteTasks = await note.tasks();
       allTasks.push(...noteTasks);
     }
