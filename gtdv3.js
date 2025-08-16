@@ -109,7 +109,7 @@
     }
 
     const elapsed = Date.now() - start; // elapsed ms
-    console.log(`getAllTasks: scanned ${noteHandles.length} notes, found ${allTasks.length} tasks in ${elapsed}ms`);
+    await app.alert(`getAllTasks: scanned ${noteHandles.length} notes, found ${allTasks.length} tasks in ${elapsed}ms`);
 
     return allTasks;
   }, // end getAllTasks
