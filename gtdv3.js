@@ -115,20 +115,12 @@
   }, // end getAllTasks
 
   // ===============================================================================================
-  // Helper function to build a list of project notes. Parameters allow for different formats:
-  // - groupByStatus:
-  //    -- "full" means a bulleted list with statuses as top-level bullets
-  //    -- "flat" means a list of projects without top-level status bullets (for [bracketed text] lists)
-  //    -- "none" means a list of all projects with no grouping
-  // - includeChildren:
-  //    -- true means that children will be nested under parents
-  //    -- false means that children will be listed as standalone projects
-  // - format:
-  //    -- "standard" means just lists of projects
-  //    -- "weeklyReview" means additional metadata about each project listed as sub-bullets
-  // - sortCompletedByDate:
-  //    -- true means that completed projects will be sorted by date desc (based on subtag) instead of alphabetically
-  //    -- false means that completed projects will be sorted alphabetically
+  // Build a nested list of project notes, respecting parent/child relationships
+  // Parameters:
+  // - groupByStatus: "full" (status headers), "flat" (one combined list), "weeklyReview" (future)
+  // - includeChildren: true/false (whether to recurse into children)
+  // - format: "standard" or "weeklyReview" (controls what each project line looks like)
+  // - sortCompletedByDate: true/false (special sort for completed projects by YYYYMM tag)
   // ===============================================================================================
   buildNestedProjectList: async function(app, {
     baseNotes,
@@ -137,6 +129,7 @@
     format = "standard",
     sortCompletedByDate = false
   }) {
+    // Status tags + human-readable labels
     const projectStatuses = [
       { tag: "project/focus", label: "Focus Projects" },
       { tag: "project/active", label: "Active Projects" },
@@ -148,74 +141,123 @@
       { tag: "project/canceled", label: "Canceled Projects" }
     ];
 
-    const displayed = new Set();
+    // Helper: extract the unique note-id value from a note's tags
+    const getNoteId = note =>
+      note.tags.find(t => t.startsWith("note-id/"))?.replace("note-id/", "") || null;
 
-    // Recursive child renderer — sorts children alphabetically per parent
-    const getChildMarkdown = async (parentUUID, indentLevel) => {
-      const parentNote = await app.notes.find(parentUUID);
-      const parentNoteIdTag = await this.getNoteIdTag(app, parentNote);
-      const parentNoteIdValue = parentNoteIdTag.split("/")[1];
+    // Expand a note into its full hierarchy (ancestors + descendants)
+    const expandHierarchy = async (note, seen = new Set()) => {
+      const results = new Set();  // unique notes
+      const stack = [note];       // notes we still need to process
 
-      const related = await this.getFilteredNotes(app, `r/parent/${parentNoteIdValue}`);
+      while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current || seen.has(current.uuid)) continue; // skip duplicates
+        seen.add(current.uuid);
+        results.add(current);
 
-      const children = related
-        .filter(n => n.tags.some(t => t.startsWith("project/")))
-        .map(n => ({ handle: this.normalizeNoteHandle(n), uuid: n.uuid }))
-        .sort((a, b) => a.handle.name.localeCompare(b.handle.name));
+        const noteId = getNoteId(current);
+        if (!noteId) continue;
 
-      let md = "";
-      for (const child of children) {
-        if (displayed.has(child.uuid)) continue;
-        displayed.add(child.uuid);
-        md += `${"    ".repeat(indentLevel)}- [${child.handle.name}](${child.handle.url})\n\n`;
-        md += await getChildMarkdown(child.uuid, indentLevel + 1);
+        // ===== Expand upward to parents =====
+        const parentIds = current.tags
+          .filter(t => t.startsWith("parent/"))
+          .map(t => t.split("/")[1]);  // extract the note-id from "parent/<id>"
+
+        for (const pid of parentIds) {
+          const parents = await this.getFilteredNotes(app, `note-id/${pid}`);
+          for (const p of parents) stack.push(p);
+        }
+
+        // ===== Expand downward to children =====
+        if (includeChildren) {
+          const children = await this.getFilteredNotes(app, `r/parent/${noteId}`);
+          for (const c of children) stack.push(c);
+        }
       }
+      return [...results];  // turn Set into array
+    };
+
+    // Expand all baseNotes into their full hierarchies
+    let expandedNotes = [];
+    const seenExpand = new Set();
+    for (const note of baseNotes) {
+      const fullSet = await expandHierarchy(note, seenExpand);
+      expandedNotes.push(...fullSet);
+    }
+    // Deduplicate by uuid (so we don’t list the same project multiple times unnecessarily)
+    expandedNotes = [...new Map(expandedNotes.map(n => [n.uuid, n])).values()];
+
+    // Recursive renderer: turns a note (and its children) into markdown
+    const renderProject = async (note, indentLevel = 0, visited = new Set()) => {
+      if (visited.has(note.uuid)) return "";  // prevent infinite loops
+      visited.add(note.uuid);
+
+      const handle = this.normalizeNoteHandle(note);  // { name, url }
+      const indent = "    ".repeat(indentLevel);      // 4 spaces per indent
+
+      // Base markdown line for the project
+      let md = `${indent}- [${handle.name}](${handle.url})\n`;
+
+      // Option: add metadata for weeklyReview format
+      if (format === "weeklyReview") {
+        md += `${indent}    - Status: TBD\n`; // placeholder, to be filled later
+      }
+
+      // Recurse into children (if enabled)
+      if (includeChildren) {
+        const noteId = getNoteId(note);
+        const children = await this.getFilteredNotes(app, `r/parent/${noteId}`);
+        const sorted = children.sort((a, b) => a.name.localeCompare(b.name));
+
+        for (const c of sorted) {
+          md += await renderProject(c, indentLevel + 1, new Set(visited));
+        }
+      }
+
       return md;
     };
 
+    // Output markdown accumulator
     let md = "";
 
+    // ========== FULL MODE: grouped by project status ==========
     if (groupByStatus === "full") {
-      const grouped = {};
       for (const status of projectStatuses) {
-        grouped[status.tag] = [];
-      }
+        md += `- ${status.label}\n`;  // status header
 
-      for (const proj of baseNotes) {
-        const handle = this.normalizeNoteHandle(proj);
-        const statusTag = proj.tags.find(t => t.startsWith("project/"));
-        if (grouped[statusTag]) {
-          grouped[statusTag].push({ handle, uuid: proj.uuid, tags: proj.tags });
-        }
-      }
+        // Filter only projects with this status tag
+        const statusProjects = expandedNotes.filter(n => n.tags.includes(status.tag));
 
-      for (const status of projectStatuses) {
-        md += `- ${status.label}\n\n`;
-        if (grouped[status.tag].length > 0) {
-          grouped[status.tag].sort((a, b) => a.handle.name.localeCompare(b.handle.name));
-          for (const { handle, uuid } of grouped[status.tag]) {
-            if (displayed.has(uuid)) continue;
-            displayed.add(uuid);
-            md += `    - [${handle.name}](${handle.url})\n\n`;
-            if (includeChildren) {
-              md += await getChildMarkdown(uuid, 2);
-            }
-          }
+        // Special sort for completed projects (if option enabled)
+        if (status.tag === "project/completed" && sortCompletedByDate) {
+          statusProjects.sort((a, b) => {
+            const ta = a.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
+            const tb = b.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
+            return tb.localeCompare(ta); // newest first
+          });
         } else {
-          md += `    - *No matching projects*\n\n`;
+          // Default: alphabetical
+          statusProjects.sort((a, b) => a.name.localeCompare(b.name));
         }
+
+        // If no projects, add placeholder
+        if (statusProjects.length === 0) {
+          md += `    - *No matching projects*\n`;
+        } else {
+          for (const proj of statusProjects) {
+            md += await renderProject(proj, 1);
+          }
+        }
+        md += "\n";  // extra spacing between statuses
       }
 
-    } else if (groupByStatus === "flat") {
-      // Keep incoming order of baseNotes — do not globally sort
-      for (const proj of baseNotes) {
-        const handle = this.normalizeNoteHandle(proj);
-        if (displayed.has(proj.uuid)) continue;
-        displayed.add(proj.uuid);
-        md += `- [${handle.name}](${handle.url})\n\n`;
-        if (includeChildren) {
-          md += await getChildMarkdown(proj.uuid, 1);
-        }
+    // ========== FLAT MODE (and WEEKLY REVIEW) ==========
+    } else if (groupByStatus === "flat" || groupByStatus === "weeklyReview") {
+      // Just one combined list
+      const sorted = expandedNotes.sort((a, b) => a.name.localeCompare(b.name));
+      for (const proj of sorted) {
+        md += await renderProject(proj, 0);
       }
     }
 
