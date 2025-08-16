@@ -95,7 +95,7 @@
     const plugin = this;
     const allTasks = [];
 
-    const start = Date.now(); // start timing
+    //const start = Date.now(); // start timing
 
     const noteHandles = await plugin.getFilteredNotes(app, baseTag, domainTags);
 
@@ -108,8 +108,8 @@
       allTasks.push(...noteTasks);
     }
 
-    const elapsed = Date.now() - start; // elapsed ms
-    await app.alert(`getAllTasks: scanned ${noteHandles.length} notes, found ${allTasks.length} tasks in ${elapsed}ms`);
+    //const elapsed = Date.now() - start; // elapsed ms
+    //await app.alert(`getAllTasks: scanned ${noteHandles.length} notes, found ${allTasks.length} tasks in ${elapsed}ms`);
 
     return allTasks;
   }, // end getAllTasks
