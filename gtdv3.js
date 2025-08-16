@@ -65,22 +65,45 @@
 
 
   // ===============================================================================================
-  // Returns notes matching a given base tag, filtered by optional domain tags,
+  // Returns notes matching an optional given base tag, filtered by optional domain tags,
   // excluding any notes tagged with 'archive' or 'exclude'.
   // Called from anywhere instead of app.filterNotes to apply consistent exclusions.
   // ===============================================================================================
-  getFilteredNotes: async function (app, baseTag, domainTags = []) {
-    let notes = await app.filterNotes({ tag: baseTag + ",^archive,^exclude" });
+  getFilteredNotes: async function (app, baseTag = "", domainTags = []) {
+    let query = baseTag ? `${baseTag},^archive,^exclude` : "^archive,^exclude";
+    let notes = await app.filterNotes({ tag: query });
 
     if (domainTags.length > 0) {
       notes = notes.filter(n => {
         const noteDomainTags = n.tags.filter(t => t.startsWith("d/"));
-        return noteDomainTags.length === 0 || domainTags.some(dt => noteDomainTags.includes(dt));
+        return (
+          noteDomainTags.length === 0 ||
+          domainTags.some(dt => noteDomainTags.includes(dt))
+        );
       });
     }
 
     return notes;
   }, // end getFilteredNotes
+
+  // ===============================================================================================
+  // Returns all tasks matching an optional given base tag, filtered by optional domain tags,
+  // excluding any tasks on notes tagged with 'archive' or 'exclude' (due to getFilteredNotes).
+  // Called from anywhere tasks are needed to apply consistent exclusions.
+  // ===============================================================================================  
+  getAllTasks: async function(app, baseTag = "", domainTags = []) {
+    const plugin = this;
+    const allTasks = [];
+
+    const notes = await plugin.getFilteredNotes(app, baseTag, domainTags);
+
+    for (const note of notes) {
+      const noteTasks = await note.tasks();
+      allTasks.push(...noteTasks);
+    }
+
+    return allTasks;
+  }, // end getAllTasks
 
   // ===============================================================================================
   // Helper function to build a list of project notes. Parameters allow for different formats:
@@ -1220,25 +1243,33 @@
       await this.taggingCleanup(app);
     }, // End Run Tagging Cleanup
 
+/*
     // ===============================================================================================
-    // Test function to identify bug in iOS app
+    // Test function to identify bug in iOS app.
     // ===============================================================================================
     "iOS Tag Update Test": async function(app, noteUUID) {
+      // Get the current note
       const note = await app.notes.find(noteUUID);
 
-      // Show starting tags
+      // Show starting tags for the note
+      // This works in all versions
       await app.alert(`Starting tags: ${note.tags.join(", ")}`);
 
-      // First update: remove a tag
+      // First update: remove a 'project/*' tag from the note
+      // This works in web, desktop, and iOS versions
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
       if (oldStatus) {
         await note.removeTag(oldStatus);
       }
 
-      // Second update: add a tag
+      // Second update: add the project/active tag
+      // This works in web and desktop, but silently fails in iOS
+      // Note: This *does* work in Chrome/Webkit on iOS... it only fails in the native app
       await note.addTag("project/active");
 
-      // Verify
+      // Verify final tags on the note
+      // This works in web and desktop, but this alert does not display in the iOS app
+      // Note: This also works in  Chrome/Webkit on iOS and only fails in the native app
       const updatedNote = await app.notes.find(noteUUID);
       await app.alert(`Ending tags: ${updatedNote.tags.join(", ")}`);
     }, // end iOS Tag Update Test
@@ -1247,22 +1278,75 @@
     // Test function to identify bug in iOS app
     // ===============================================================================================
     "Test Two Adds": async function (app, noteUUID) {
+      // Get the current note
       const note = await app.notes.find(noteUUID);
       if (!note) {
         await app.alert("Note not found");
         return;
       }
 
+      // Show starting tags for the note
+      // This works in all versions
       await app.alert("Before: " + JSON.stringify(note.tags));
 
-      // First add
+      // First add a test tag
+      // This works in all versions
       await note.addTag("test/tag1");
 
-      // Second add
+      // Add a second test tag
+      // This silently fails on the native iOS app, but works everywhere else
       await note.addTag("test/tag2");
 
+      // This alert does not show on the native iOS app
       const updatedNote = await app.notes.find(noteUUID);
       await app.alert("After: " + JSON.stringify(updatedNote.tags));
-    } // end Test Two Adds
+    }, // end Test Two Adds
+*/
+
+    // ===============================================================================================
+    // Collects deadline tasks to display on the daily jot
+    // ===============================================================================================
+    "Refresh Deadline Tasks": async function(app, noteUUID) {
+      const plugin = this;
+
+      const currentNote = await app.notes.find(noteUUID);
+      if (!currentNote.tags || !currentNote.tags.includes("daily-jots")) {
+        await app.alert("❌ This action only works in a Daily Jot note.");
+        return;
+      }
+
+      const allTasks = await plugin.getAllTasks(app);
+
+      const deadlineTasks = [];
+      let footnoteCounter = 1;
+
+      for (const task of allTasks) {
+        if (!task.deadline) continue;
+
+        const daysLeft = plugin.daysUntilDeadline(task.deadline);
+        if (daysLeft <= 7) {
+          const pacificDeadline = plugin.convertDeadlineToPacific(task.deadline);
+          const { updatedContent, nextCounter } = plugin.uniquifyFootnotes(task.content, footnoteCounter);
+          footnoteCounter = nextCounter;
+
+          deadlineTasks.push({
+            content: `(Due: ${pacificDeadline}) ${updatedContent}`,
+            daysLeft
+          });
+        }
+      }
+
+      deadlineTasks.sort((a, b) => a.daysLeft - b.daysLeft);
+
+      const md = deadlineTasks.length
+        ? deadlineTasks.map(t => `- ${t.content}`).join("\n")
+        : "_No deadline tasks in next 7 days_";
+
+      await app.replaceNoteContent(
+        noteUUID,
+        md,
+        { section: { heading: { text: "Deadline Tasks" } } }
+      );
+    } // end Refresh Deadline Tasks
   } // end noteOption
 } // end plugin
