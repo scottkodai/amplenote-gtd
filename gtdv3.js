@@ -129,7 +129,6 @@
     format = "standard",
     sortCompletedByDate = false
   }) {
-    // Status tags + human-readable labels
     const projectStatuses = [
       { tag: "project/focus", label: "Focus Projects" },
       { tag: "project/active", label: "Active Projects" },
@@ -147,35 +146,34 @@
 
     // Expand a note into its full hierarchy (ancestors + descendants)
     const expandHierarchy = async (note, seen = new Set()) => {
-      const results = new Set();  // unique notes
-      const stack = [note];       // notes we still need to process
+      const results = new Set();
+      const stack = [note];
 
       while (stack.length > 0) {
         const current = stack.pop();
-        if (!current || seen.has(current.uuid)) continue; // skip duplicates
+        if (!current || seen.has(current.uuid)) continue;
         seen.add(current.uuid);
         results.add(current);
 
         const noteId = getNoteId(current);
         if (!noteId) continue;
 
-        // ===== Expand upward to parents =====
+        // Expand upward to parents
         const parentIds = current.tags
           .filter(t => t.startsWith("parent/"))
-          .map(t => t.split("/")[1]);  // extract the note-id from "parent/<id>"
-
+          .map(t => t.split("/")[1]);
         for (const pid of parentIds) {
           const parents = await this.getFilteredNotes(app, `note-id/${pid}`);
           for (const p of parents) stack.push(p);
         }
 
-        // ===== Expand downward to children =====
+        // Expand downward to children
         if (includeChildren) {
           const children = await this.getFilteredNotes(app, `r/parent/${noteId}`);
           for (const c of children) stack.push(c);
         }
       }
-      return [...results];  // turn Set into array
+      return [...results];
     };
 
     // Expand all baseNotes into their full hierarchies
@@ -185,78 +183,85 @@
       const fullSet = await expandHierarchy(note, seenExpand);
       expandedNotes.push(...fullSet);
     }
-    // Deduplicate by uuid (so we don’t list the same project multiple times unnecessarily)
-    expandedNotes = [...new Map(expandedNotes.map(n => [n.uuid, n])).values()];
+    expandedNotes = [...new Map(expandedNotes.map(n => [n.uuid, n])).values()]; // dedupe
 
     // Recursive renderer: turns a note (and its children) into markdown
     const renderProject = async (note, indentLevel = 0, visited = new Set()) => {
-      if (visited.has(note.uuid)) return "";  // prevent infinite loops
+      if (visited.has(note.uuid)) return "";
       visited.add(note.uuid);
 
-      const handle = this.normalizeNoteHandle(note);  // { name, url }
-      const indent = "    ".repeat(indentLevel);      // 4 spaces per indent
+      const handle = this.normalizeNoteHandle(note);
+      const indent = "    ".repeat(indentLevel);
 
-      // Base markdown line for the project
       let md = `${indent}- [${handle.name}](${handle.url})\n`;
 
-      // Option: add metadata for weeklyReview format
       if (format === "weeklyReview") {
-        md += `${indent}    - Status: TBD\n`; // placeholder, to be filled later
+        md += `${indent}    - Status: TBD\n`; // placeholder
       }
 
-      // Recurse into children (if enabled)
       if (includeChildren) {
         const noteId = getNoteId(note);
         const children = await this.getFilteredNotes(app, `r/parent/${noteId}`);
         const sorted = children.sort((a, b) => a.name.localeCompare(b.name));
-
         for (const c of sorted) {
           md += await renderProject(c, indentLevel + 1, new Set(visited));
         }
       }
-
       return md;
     };
 
-    // Output markdown accumulator
+    // Helper: find root projects (those without a parent in the expanded set)
+    const getRoots = (notes) => {
+      return notes.filter(n => {
+        const parentIds = n.tags
+          .filter(t => t.startsWith("parent/"))
+          .map(t => t.split("/")[1]);
+        // Root if no parents OR none of its parents are in expanded set
+        return parentIds.length === 0 || !expandedNotes.some(en => {
+          const enId = getNoteId(en);
+          return parentIds.includes(enId);
+        });
+      });
+    };
+
     let md = "";
 
     // ========== FULL MODE: grouped by project status ==========
     if (groupByStatus === "full") {
       for (const status of projectStatuses) {
-        md += `- ${status.label}\n`;  // status header
+        md += `- ${status.label}\n`;
 
-        // Filter only projects with this status tag
+        // Only projects with this status
         const statusProjects = expandedNotes.filter(n => n.tags.includes(status.tag));
 
-        // Special sort for completed projects (if option enabled)
+        // Only render roots for this status
+        const roots = getRoots(statusProjects);
+
+        // Sort roots (alphabetical or by completed date)
         if (status.tag === "project/completed" && sortCompletedByDate) {
-          statusProjects.sort((a, b) => {
+          roots.sort((a, b) => {
             const ta = a.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
             const tb = b.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
             return tb.localeCompare(ta); // newest first
           });
         } else {
-          // Default: alphabetical
-          statusProjects.sort((a, b) => a.name.localeCompare(b.name));
+          roots.sort((a, b) => a.name.localeCompare(b.name));
         }
 
-        // If no projects, add placeholder
-        if (statusProjects.length === 0) {
+        if (roots.length === 0) {
           md += `    - *No matching projects*\n`;
         } else {
-          for (const proj of statusProjects) {
+          for (const proj of roots) {
             md += await renderProject(proj, 1);
           }
         }
-        md += "\n";  // extra spacing between statuses
+        md += "\n";
       }
 
     // ========== FLAT MODE (and WEEKLY REVIEW) ==========
     } else if (groupByStatus === "flat" || groupByStatus === "weeklyReview") {
-      // Just one combined list
-      const sorted = expandedNotes.sort((a, b) => a.name.localeCompare(b.name));
-      for (const proj of sorted) {
+      const roots = getRoots(expandedNotes).sort((a, b) => a.name.localeCompare(b.name));
+      for (const proj of roots) {
         md += await renderProject(proj, 0);
       }
     }
