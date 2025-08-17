@@ -273,8 +273,8 @@
       }
     }
 
-    await app.alert(md.trim);
-    
+    await app.alert("Raw markdown:\n" + JSON.stringify(md));
+
     return md.trim();
   }, // end buildNestedProjectList
 
