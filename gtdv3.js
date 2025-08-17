@@ -202,39 +202,52 @@
       const indent = "    ".repeat(indentLevel);
       let md = `${indent}- [${handle.name}](${handle.url})\n`;
 
-      // === Weekly Review Metadata ===
+      // --- Only special case for weeklyReview ---
       if (format === "weeklyReview") {
         const lastJot = await getLatestDailyJotBacklink(app, note);
         md += lastJot
           ? `${indent}    - Last Activity: [${lastJot.name}](${lastJot.url})\n`
           : `${indent}    - Last Activity: _none_\n`;
 
+        // Collect refs and defs separately
         const rawTasks = await collectTasksFromNoteAndBacklinks(app, note);
+        let footnoteDefs = [];
         if (rawTasks.length > 0) {
           md += `${indent}    - Tasks:\n`;
           for (const raw of rawTasks) {
             const { updatedContent, nextCounter } = this.uniquifyFootnotes(raw, footnoteCounter);
             footnoteCounter = nextCounter;
-            md += `${indent}        - ${updatedContent}\n`;
+
+            // Split refs vs defs
+            // Everything returned by updatedContent includes refs;
+            // our uniquifyFootnotes currently also replaces defs.
+            // Instead, capture defs separately:
+            const defMatches = raw.match(/^\[\^.*?\]:.*$/gm);
+            if (defMatches) {
+              footnoteDefs.push(...defMatches);
+            }
+
+            // Only add the task content (without defs) to the task list
+            const cleaned = raw.replace(/^\[\^.*?\]:.*$/gm, "").trim();
+            if (cleaned) {
+              md += `${indent}        - ${cleaned}\n`;
+            }
           }
-          md += `\n`; // 🔑 separate tasks from next block
         } else {
-          md += `${indent}    - Tasks: _none_\n\n`;
+          md += `${indent}    - Tasks: _none_\n`;
+        }
+
+        // ✅ Append definitions at flush-left after finishing this project
+        if (footnoteDefs.length > 0) {
+          md += `\n${footnoteDefs.join("\n\n")}\n\n`;
         }
       }
 
       if (includeChildren) {
         md += await renderChildren(note, indentLevel + 1, new Set(visited));
       }
-      return md;
-    };
 
-    // --- 🔹 Fixed Roots ---
-    const getRoots = (notes) => {
-      return notes.filter(n => {
-        const hasParentTag = n.tags.some(t => t.startsWith("r/parent/"));
-        return !hasParentTag;
-      });
+      return md;
     };
 
     // --- Main Render ---
