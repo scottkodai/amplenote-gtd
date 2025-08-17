@@ -273,6 +273,8 @@
       }
     }
 
+    await app.alert(md.trim);
+    
     return md.trim();
   }, // end buildNestedProjectList
 
