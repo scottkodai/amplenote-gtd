@@ -300,6 +300,8 @@
       }
     }
 
+    await app.alert(JSON.stringify(md));
+
     return md.trim();
   }, // end buildNestedProjectList
 
