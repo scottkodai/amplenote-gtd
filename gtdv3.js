@@ -217,8 +217,9 @@
             footnoteCounter = nextCounter;
             md += `${indent}        - ${updatedContent}\n`;
           }
+          md += `\n`; // 🔑 separate tasks from next block
         } else {
-          md += `${indent}    - Tasks: _none_\n`;
+          md += `${indent}    - Tasks: _none_\n\n`;
         }
       }
 
