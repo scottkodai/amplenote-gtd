@@ -218,16 +218,13 @@
             const { updatedContent, nextCounter } = this.uniquifyFootnotes(raw, footnoteCounter);
             footnoteCounter = nextCounter;
 
-            // Split refs vs defs
-            // Everything returned by updatedContent includes refs;
-            // our uniquifyFootnotes currently also replaces defs.
-            // Instead, capture defs separately:
+            // Capture any footnote definitions separately
             const defMatches = raw.match(/^\[\^.*?\]:.*$/gm);
             if (defMatches) {
               footnoteDefs.push(...defMatches);
             }
 
-            // Only add the task content (without defs) to the task list
+            // Strip out definitions from task text
             const cleaned = raw.replace(/^\[\^.*?\]:.*$/gm, "").trim();
             if (cleaned) {
               md += `${indent}        - ${cleaned}\n`;
@@ -248,6 +245,23 @@
       }
 
       return md;
+    };
+
+    // --- Roots helper ---
+    const getRoots = (notes) => {
+      const allChildIds = new Set();
+      for (const n of baseNotes) {
+        n.tags.forEach(t => {
+          if (t.startsWith("r/parent/")) {
+            allChildIds.add(t.split("/")[2]);
+          }
+        });
+      }
+      return notes.filter(n => {
+        const id = getNoteId(n);
+        if (!id) return true;
+        return !n.tags.some(t => t.startsWith("r/parent/")) && !allChildIds.has(id);
+      });
     };
 
     // --- Main Render ---
@@ -285,8 +299,6 @@
         md += await renderProject(proj, 0);
       }
     }
-
-    await app.alert("Raw markdown:\n" + JSON.stringify(md));
 
     return md.trim();
   }, // end buildNestedProjectList
