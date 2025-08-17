@@ -228,20 +228,11 @@
       return md;
     };
 
-    // --- Roots (keep your existing behavior) ---
-    const getRoots = (notes, allNotes) => {
-      const allChildIds = new Set();
-      for (const n of allNotes) {
-        n.tags.forEach(t => {
-          if (t.startsWith("r/parent/")) {
-            allChildIds.add(t.split("/")[2]);
-          }
-        });
-      }
+    // --- 🔹 Fixed Roots ---
+    const getRoots = (notes) => {
       return notes.filter(n => {
-        const id = getNoteId(n);
-        if (!id) return true;
-        return !n.tags.some(t => t.startsWith("r/parent/")) && !allChildIds.has(id);
+        const hasParentTag = n.tags.some(t => t.startsWith("r/parent/"));
+        return !hasParentTag;
       });
     };
 
@@ -252,7 +243,7 @@
       for (const status of projectStatuses) {
         md += `- ${status.label}\n`;
         const statusProjects = baseNotes.filter(n => n.tags.includes(status.tag));
-        const roots = getRoots(statusProjects, baseNotes);
+        const roots = getRoots(statusProjects);
 
         if (status.tag === "project/completed" && sortCompletedByDate) {
           roots.sort((a, b) => {
@@ -275,7 +266,7 @@
       }
 
     } else if (groupByStatus === "flat" || groupByStatus === "weeklyReview") {
-      const roots = getRoots(baseNotes, baseNotes).sort((a, b) => a.name.localeCompare(b.name));
+      const roots = getRoots(baseNotes).sort((a, b) => a.name.localeCompare(b.name));
       for (const proj of roots) {
         md += await renderProject(proj, 0);
       }
