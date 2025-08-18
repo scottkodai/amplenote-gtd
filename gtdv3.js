@@ -871,17 +871,25 @@
           break;
       }
 
-      // Get all notes with the base tag
-      //let matchingNotes = await app.filterNotes({ tag: baseTag });
+      // Get all notes with the base tag (filtered by domain)
       let matchingNotes = await this.getFilteredNotes(app, baseTag, domainTags);
 
-      // Build flat list with children
-      const md = await plugin.buildNestedProjectList(app, {
-        baseNotes: matchingNotes,
-        groupByStatus: "flat",
-        includeChildren: true,
-        format: "standard"
-      });
+      // Build the section content differently depending on list type
+      let md = "";
+      if (listType === "list/project") {
+        // Keep hierarchy-aware builder for projects
+        md = await plugin.buildNestedProjectList(app, {
+          baseNotes: matchingNotes,
+          groupByStatus: "flat",
+          includeChildren: true,
+          format: "standard"
+        });
+      } else {
+        // Simple flat list for other types
+        md = matchingNotes.length
+          ? matchingNotes.map(n => `- [${n.name}](https://www.amplenote.com/notes/${n.uuid})`).join("\n")
+          : "- _No matching notes_";
+      }
 
       // Replace section content
       await app.replaceNoteContent(note.uuid, md, {
@@ -893,7 +901,7 @@
     }
 
     return { updatedSections: totalUpdated, totalItems: totalCount };
-  }, //end updateBracketedSections
+  }, // end updateBracketedSections
 
   // ===============================================================================================
   // Updates any existing Child Projects section with links to all child projects
