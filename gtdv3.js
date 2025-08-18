@@ -885,6 +885,8 @@
           format: "standard"
         });
       } else {
+        // Sort alphabetically by note name
+        matchingNotes.sort((a, b) => a.name.localeCompare(b.name));
         // Simple flat list for other types
         md = matchingNotes.length
           ? matchingNotes.map(n => `- [${n.name}](https://www.amplenote.com/notes/${n.uuid})`).join("\n")
