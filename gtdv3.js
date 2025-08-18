@@ -1340,11 +1340,13 @@
         summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
       }
 
+/*
       await app.alert(
         `✅ Update complete for "${note.name}"\n` +
         `Sections updated: ${summary.updatedSections}\n` +
         `Total items updated: ${summary.totalItems}`
       );
+*/
     }, // end Update Note
 
     // ===============================================================================================
