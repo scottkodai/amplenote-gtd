@@ -817,7 +817,6 @@
       { name: "Related People", fn: this.updateRelatedPeopleSection },
       { name: "Related References", fn: this.updateRelatedReferencesSection },
       { name: "Related Software", fn: this.updateRelatedSoftwareSection },
-      { name: "Related Vendors", fn: this.updateRelatedVendorsSection },
       { name: "Parent Projects", fn: this.updateParentProjectsSection },
       { name: "Child Projects", fn: this.updateChildProjectsSection }
     ];
@@ -1046,40 +1045,6 @@
   }, // end updateRelatedTasksSection
 
   // ===============================================================================================
-  // Updates any existing Related Vendors section with links to all related vendors
-  // Called from: 
-  // ===============================================================================================
-  updateRelatedVendorsSection: async function(app, noteUUID, domainTags = []) {
-    const sectionHeading = "Related Vendors";
-
-    const sections = await app.getNoteSections({ uuid: noteUUID });
-    const targetSection = sections.find(s =>
-      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
-    );
-    if (!targetSection) return { updated: false, count: 0 };
-
-    const note = await app.notes.find(noteUUID);
-    const noteIdTag = await this.getNoteIdTag(app, note);
-    const noteIdValue = noteIdTag.split("/")[1];
-
-    // Find vendor matches, with domain filtering & exclusions handled by helper
-    const vendorMatches = await this.getFilteredNotes(app, `r/vendor/${noteIdValue}`, domainTags);
-
-    const relatedVendors = vendorMatches.map(n => this.normalizeNoteHandle(n));
-    relatedVendors.sort((a, b) => a.name.localeCompare(b.name));
-
-    const vendorList = relatedVendors.length
-      ? relatedVendors.map(n => `- [${n.name}](${n.url})`).join("\n")
-      : "_(No related vendors)_";
-
-    await app.replaceNoteContent(noteUUID, vendorList, {
-      section: { heading: { text: sectionHeading } }
-    });
-
-    return { updated: true, count: relatedVendors.length };
-  }, // end updateRelatedVendorsSection
-
-  // ===============================================================================================
   // Updates any existing Related Projects section with links to all related projects
   // Called from: 
   // ===============================================================================================
@@ -1180,14 +1145,21 @@
   updateRelatedReferencesSection: async function(app, noteUUID, domainTags = []) {
     const sectionHeading = "Related References";
 
+    // 1. Locate the section in the note
     const sections = await app.getNoteSections({ uuid: noteUUID });
     const targetSection = sections.find(s =>
       s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
     );
     if (!targetSection) return { updated: false, count: 0 };
 
+    // 2. Load the current note
     const note = await app.notes.find(noteUUID);
-    const referenceTags = note.tags.filter(t => t.startsWith("r/reference/"));
+
+    // 3. Get all r/reference/... tags (any depth)
+    const referenceTags = note.tags.filter(t =>
+      t.startsWith("r/reference/") && t.split("/").length >= 3
+    );
+
     if (referenceTags.length === 0) {
       await app.replaceNoteContent(noteUUID, "_(No related references)_", {
         section: { heading: { text: sectionHeading, index: targetSection.heading.index } }
@@ -1195,24 +1167,32 @@
       return { updated: true, count: 0 };
     }
 
+    // 4. Resolve note-ids and fetch matching notes
     const relatedRefs = [];
     for (const tag of referenceTags) {
-      const noteId = tag.split("/")[2];
-
-      // Use new helper to get matches, filtered by domain/exclusions
-      let matches = await this.getFilteredNotes(app, `note-id/${noteId}`, domainTags);
-
+      const noteId = tag.split("/").pop(); // Support arbitrarily deep paths
+      const matches = await this.getFilteredNotes(app, `note-id/${noteId}`, domainTags);
       if (matches.length > 0) {
-        relatedRefs.push(this.normalizeNoteHandle(matches[0]));
+        const handle = this.normalizeNoteHandle(matches[0]);
+
+        // ⛔ Exclude notes that are actually people or software (just in case)
+        const isPeople = handle.tags.some(t => t.startsWith("reference/people"));
+        const isSoftware = handle.tags.some(t => t.startsWith("reference/software"));
+        if (!isPeople && !isSoftware) {
+          relatedRefs.push(handle);
+        }
       }
     }
 
+    // 5. Sort alphabetically
     relatedRefs.sort((a, b) => a.name.localeCompare(b.name));
 
+    // 6. Build markdown output
     const refList = relatedRefs.length
       ? relatedRefs.map(n => `- [${n.name}](${n.url})`).join("\n")
       : "_(No related references)_";
 
+    // 7. Replace section content
     await app.replaceNoteContent(noteUUID, refList, {
       section: { heading: { text: sectionHeading } }
     });
