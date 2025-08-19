@@ -710,19 +710,6 @@
       !t.startsWith("r/parent/") &&
       !t.startsWith("r/child/")
     );
-/*======= replaced with updated code below; remove after testing
-    for (const tag of directRTags) {
-      const [, type, targetId] = tag.split("/");
-      const matches = await app.filterNotes({ tag: `note-id/${targetId}` });
-      if (matches.length > 0) {
-        const handle = plugin.normalizeNoteHandle(matches[0]);
-        // Avoid duplicates
-        if (!results.some(r => r.uuid === handle.uuid)) {
-          results.push({ type: "other", uuid: handle.uuid, label: handle.name });
-        }
-      }
-    }
-*/
 
     for (const tag of directRTags) {
       const parts = tag.split("/");
@@ -1346,6 +1333,54 @@
       );
 */
     }, // end Update Note
+
+    // =============================================================================================
+    // Update All Lists
+    // This function is the orchestrator for updating all list notes in whatever ways are 
+    // appropriate
+    // =============================================================================================
+
+    "Update All Lists": async function (app) {
+      const plugin = this;
+
+      // 1. Get all list/* notes
+      const listNotes = await plugin.getFilteredNotes(app, "list");
+
+      let totalNotes = 0;
+      let totalSections = 0;
+      let totalItems = 0;
+
+      // 2. Update each list note using existing logic
+      for (const note of listNotes) {
+        const domainTags = note.tags.filter(t => t.startsWith("d/"));
+        const listType = note.tags.find(t => t.startsWith("list/"));
+
+        let summary = { updatedSections: 0, totalItems: 0 };
+
+        switch (listType) {
+          case "list/project":
+          case "list/software":
+          case "list/people":
+          case "list/reference":
+            summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
+            break;
+          case "list/related":
+            summary = await plugin.updateAllRelatedSections(app, note.uuid, domainTags);
+            break;
+        }
+
+        totalNotes++;
+        totalSections += summary.updatedSections;
+        totalItems += summary.totalItems;
+      }
+
+      await app.alert(
+        `✅ Updated ${totalNotes} list notes\n` +
+        `Sections refreshed: ${totalSections}\n` +
+        `Total items updated: ${totalItems}`
+      );
+    }, // end Update All Lists
+
 
     // ===============================================================================================
     // Note option wrapper to run Tagging Cleanup manually
