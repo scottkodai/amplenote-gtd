@@ -710,7 +710,7 @@
       !t.startsWith("r/parent/") &&
       !t.startsWith("r/child/")
     );
-
+/*======= replaced with updated code below; remove after testing
     for (const tag of directRTags) {
       const [, type, targetId] = tag.split("/");
       const matches = await app.filterNotes({ tag: `note-id/${targetId}` });
@@ -719,6 +719,24 @@
         // Avoid duplicates
         if (!results.some(r => r.uuid === handle.uuid)) {
           results.push({ type: "other", uuid: handle.uuid, label: handle.name });
+        }
+      }
+    }
+*/
+
+    for (const tag of directRTags) {
+      const parts = tag.split("/");
+      if (parts.length < 3) continue; // malformed tag
+
+      const noteId = parts[parts.length - 1];
+      const type = parts.slice(1, -1).join("/"); // everything between r/ and note-id
+
+      const matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+      if (matches.length > 0) {
+        const handle = plugin.normalizeNoteHandle(matches[0]);
+        // Avoid duplicates
+        if (!results.some(r => r.uuid === handle.uuid)) {
+          results.push({ type, uuid: handle.uuid, label: handle.name });
         }
       }
     }
