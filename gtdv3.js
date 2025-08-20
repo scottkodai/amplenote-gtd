@@ -127,7 +127,7 @@
     groupByStatus = "full",
     includeChildren = true,
     format = "standard",
-    sortCompletedByDate = false
+    sortCompletedByDate = true
   }) {
     const plugin = this;
 
