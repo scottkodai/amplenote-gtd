@@ -189,7 +189,28 @@
 
       const handle = plugin.normalizeNoteHandle(note);
       const indent = "    ".repeat(indentLevel);
-      let md = `${indent}- [${handle.name}](${handle.url})\n`;
+
+      let label = `[${handle.name}](${handle.url})`;
+
+      // Pull out the subtag from the project/completed tag and add it to the label
+      // in human readable format (Jul 2025 rather than 202507)
+      if (handle.tags.some(t => t.startsWith("project/completed/"))) {
+        const dateTag = handle.tags.find(t => t.startsWith("project/completed/"));
+        const yyyymm = dateTag?.split("/")[2];
+        if (/^\d{6}$/.test(yyyymm)) {
+          const year = yyyymm.slice(0, 4);
+          const month = yyyymm.slice(4);
+          const dateObj = new Date(`${year}-${month}-01`);
+          const formatter = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short" });
+          label += ` (${formatter.format(dateObj)})`; // e.g., (Jul 2025)
+        } else if (yyyymm) {
+          label += ` (${yyyymm})`; // fallback
+        }
+      }
+
+      let md = `${indent}- ${label}\n`;
+
+//      let md = `${indent}- [${handle.name}](${handle.url})\n`;
 
       if (format === "weeklyReview") {
         // placeholder for next feature
@@ -275,10 +296,6 @@
       // Group second-level roots by their own status
       const rootsByStatus = new Map(projectStatuses.map(s => [s.tag, []]));
       for (const root of secondLevelRoots.values()) {
-//        const statusTag = root.tags.find(t => t.startsWith("project/"));
-//        if (statusTag && rootsByStatus.has(statusTag)) {
-//          rootsByStatus.get(statusTag).push(root);
-//        }
         const statusTag = root.tags.find(t => t.startsWith("project/"));
         if (statusTag) {
           for (const [statusPrefix, bucket] of rootsByStatus.entries()) {
