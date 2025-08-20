@@ -909,14 +909,49 @@
 
       // Build the section content differently depending on list type
       let md = "";
+
       if (listType === "list/project") {
-        // Keep hierarchy-aware builder for projects
-        md = await plugin.buildNestedProjectList(app, {
-          baseNotes: matchingNotes,
-          groupByStatus: "flat",
-          includeChildren: true,
-          format: "standard"
+        const sortCompletedByDate = subtag === "completed";
+
+        matchingNotes = matchingNotes
+          .filter(n => n.tags.some(t => t.startsWith("project/")))
+          .sort((a, b) => {
+            if (sortCompletedByDate) {
+              const getDateTag = n =>
+                n.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
+              return getDateTag(b).localeCompare(getDateTag(a)); // newest first
+            } else {
+              return a.name.localeCompare(b.name);
+            }
+          });
+
+        const formatter = new Intl.DateTimeFormat("en-US", {
+          year: "numeric",
+          month: "short"
         });
+
+        md = matchingNotes.length
+          ? await Promise.all(matchingNotes.map(async (note) => {
+              const handle = plugin.normalizeNoteHandle(note);
+              let label = `[${handle.name}](${handle.url})`;
+
+              if (sortCompletedByDate) {
+                const dateTag = handle.tags.find(t => t.startsWith("project/completed/"));
+                const yyyymm = dateTag?.split("/")[2];
+                if (/^\d{6}$/.test(yyyymm)) {
+                  const year = yyyymm.slice(0, 4);
+                  const month = yyyymm.slice(4);
+                  const dateObj = new Date(`${year}-${month}-15`);
+                  label += ` (${formatter.format(dateObj)})`;
+                } else if (yyyymm) {
+                  label += ` (${yyyymm})`;
+                }
+              }
+
+              return `- ${label}`;
+            })).then(lines => lines.join("\n"))
+          : "- _No matching notes_";
+
       } else {
         // Sort alphabetically by note name
         matchingNotes.sort((a, b) => a.name.localeCompare(b.name));
