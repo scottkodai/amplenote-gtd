@@ -200,7 +200,7 @@
         if (/^\d{6}$/.test(yyyymm)) {
           const year = yyyymm.slice(0, 4);
           const month = yyyymm.slice(4);
-          const dateObj = new Date(`${year}-${month}-01`);
+          const dateObj = new Date(`${year}-${month}-15`); //using the 15th to avoid time zone rolling to previous month
           const formatter = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short" });
           label += ` (${formatter.format(dateObj)})`; // e.g., (Jul 2025)
         } else if (yyyymm) {
