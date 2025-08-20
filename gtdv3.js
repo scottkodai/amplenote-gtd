@@ -275,10 +275,22 @@
       // Group second-level roots by their own status
       const rootsByStatus = new Map(projectStatuses.map(s => [s.tag, []]));
       for (const root of secondLevelRoots.values()) {
+//        const statusTag = root.tags.find(t => t.startsWith("project/"));
+//        if (statusTag && rootsByStatus.has(statusTag)) {
+//          rootsByStatus.get(statusTag).push(root);
+//        }
         const statusTag = root.tags.find(t => t.startsWith("project/"));
-        if (statusTag && rootsByStatus.has(statusTag)) {
-          rootsByStatus.get(statusTag).push(root);
-        }
+        if (statusTag) {
+          for (const [statusPrefix, bucket] of rootsByStatus.entries()) {
+            if (
+              statusTag === statusPrefix ||
+              statusTag.startsWith(statusPrefix + "/")
+            ) {
+              bucket.push(root);
+              break;
+            }
+          }
+        }        
       }
 
       // Render each status bucket
