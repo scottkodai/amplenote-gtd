@@ -600,7 +600,7 @@
   // ===============================================================
   setNoteTags: async function(app, noteUUID) {
     const plugin = this;
-    const note = await app.notes.find(noteUUID);
+    let note = await app.notes.find(noteUUID);
     if (!note) {
       await app.alert("❌ Could not find the current note.");
       return;
@@ -679,6 +679,9 @@
         }
       }
     } // end bootstrap of untagged notes
+
+    // Refetch the note to ensure updated tags/content are recognized
+    note = await app.notes.find(noteUUID);
 
     const isProjectNote = note.tags.some(t => t.startsWith("project/"));
     const currentRelations = await plugin.getReadableRelationships(app, note);
