@@ -586,7 +586,7 @@
       section: { heading: { text: "Tagging Cleanup" } }
     });
 
-    await app.alert("✅ Tagging Cleanup section updated in Inbox.");
+    // await app.alert("✅ Tagging Cleanup section updated in Inbox.");
   }, // end taggingCleanup
 
 // =================================================================================================
