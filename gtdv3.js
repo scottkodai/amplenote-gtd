@@ -606,6 +606,80 @@
       return;
     }
 
+    // === Step 0: Bootstrap untagged notes ===
+    if (note.tags.length === 0) {
+      const setupResult = await app.prompt(`Set up new note: "${note.name}"`, {
+        inputs: [
+          {
+            label: "Domain",
+            type: "radio",
+            options: [
+              { label: "None", value: "" },
+              { label: "Home", value: "d/home" },
+              { label: "Work", value: "d/work" }
+            ],
+            value: "" // Default to None
+          },
+          {
+            label: "Note Type",
+            type: "radio",
+            options: [
+              { label: "Project", value: "project" },
+              { label: "People", value: "people" },
+              { label: "Software", value: "software" },
+              { label: "Reference", value: "reference" }
+            ]
+          }
+        ]
+      });
+
+      // Exit if user canceled
+      if (!setupResult) return;
+
+      const [domainTag, noteType] = setupResult;
+
+      // Add domain tag if selected
+      if (domainTag) await note.addTag(domainTag);
+
+      // Add default type tag
+      let typeTag = "";
+      let templateName = "";
+
+      switch (noteType) {
+        case "project":
+          typeTag = "project/active";
+          templateName = "Project Heading Template";
+          break;
+        case "people":
+          typeTag = "reference/people/uncategorized";
+          templateName = "People Heading Template";
+          break;
+        case "software":
+          typeTag = "reference/software/uncategorized";
+          templateName = "Software Heading Template";
+          break;
+        case "reference":
+          typeTag = "reference/uncategorized";
+          templateName = "Reference Heading Template";
+          break;
+      }
+
+      if (typeTag) {
+        await note.addTag(typeTag);
+      }
+
+      // Insert template at the end of the note
+      if (templateName) {
+        const templateNote = await app.findNote({ name: templateName });
+        if (!templateNote) {
+          await app.alert(`❌ Template note "${templateName}" not found.`);
+        } else {
+          const content = await app.getNoteContent(templateNote);
+          await app.insertNoteContent({ uuid: note.uuid }, content, { atEnd: true });
+        }
+      }
+    } // end bootstrap of untagged notes
+
     const isProjectNote = note.tags.some(t => t.startsWith("project/"));
     const currentRelations = await plugin.getReadableRelationships(app, note);
 
