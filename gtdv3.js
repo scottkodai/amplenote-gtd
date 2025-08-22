@@ -601,12 +601,12 @@
     const plugin = this;
 
     /**
-     * Extracts unique category subtags from reference-type notes
-     * Handles nested tags like "reference/travel/gartner" and "reference/technical"
+     * Extracts all unique subtags from reference notes,
+     * including intermediate paths like "travel" if "travel/gartner" exists.
      *
      * @param {string} baseTag - e.g., "reference", "reference/people"
-     * @param {string[]} excludeFirstLevel - Top-level subtypes to ignore (e.g., ["people", "software"])
-     * @returns {Promise<string[]>} - Sorted list of subtags (e.g., ["technical", "travel", "travel/gartner"])
+     * @param {string[]} excludeFirstLevel - top-level types to exclude (e.g., ["people", "software"])
+     * @returns {Promise<string[]>} - Sorted list of category paths
      */
     async function getReferenceCategories(baseTag, excludeFirstLevel = []) {
       const notes = await app.filterNotes({ tag: baseTag });
@@ -614,14 +614,19 @@
 
       for (let note of notes) {
         for (let tag of note.tags) {
-          if (tag.startsWith(baseTag + "/")) {
-            // Extract everything after the baseTag
-            const subtag = tag.split("/").slice(baseTag.split("/").length).join("/"); // flexible for "reference" or "reference/people"
-            const first = subtag.split("/")[0];
+          if (!tag.startsWith(baseTag + "/")) continue;
 
-            if (!excludeFirstLevel.includes(first) && subtag) {
-              categories.add(subtag);
-            }
+          // Subtag is everything after baseTag (e.g., "travel/gartner")
+          const subtagParts = tag.split("/").slice(baseTag.split("/").length);
+          const first = subtagParts[0];
+
+          // Skip excluded root-level categories
+          if (!first || excludeFirstLevel.includes(first)) continue;
+
+          // Add all intermediate paths
+          for (let i = 1; i <= subtagParts.length; i++) {
+            const partial = subtagParts.slice(0, i).join("/");
+            categories.add(partial);
           }
         }
       }
