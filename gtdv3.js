@@ -564,6 +564,23 @@
     if (noParent.length > 0) {
       cleanupResults.push({ reason: "Child projects with no parent project", notes: noParent });
     }
+    
+    // G: Uncategorized reference notes
+    const uncategorizedTags = [
+      "reference/uncategorized",
+      "reference/people/uncategorized",
+      "reference/software/uncategorized"
+    ];
+
+    const uncategorized = [];
+    for (const tag of uncategorizedTags) {
+      const notes = await app.filterNotes({ tag });
+      uncategorized.push(...notes);
+    }
+
+    if (uncategorized.length > 0) {
+      cleanupResults.push({ reason: "Uncategorized reference notes", notes: uncategorized });
+    }
 
     // Build Markdown for the Tagging Cleanup section
     let md = "";
