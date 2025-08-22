@@ -673,7 +673,7 @@
     // === Step 4: Save the updated note ===
     await app.replaceNoteContent(categoryNote, newContent);
 
-    await app.alert("✅ Categories updated in 'System: Categories' note.");
+    // await app.alert("✅ Categories updated in 'System: Categories' note.");
   }, // end updateSystemCategories
 
 // =================================================================================================
@@ -687,13 +687,37 @@
   // ===============================================================
   setNoteTags: async function(app, noteUUID) {
     const plugin = this;
+
+    // Helper: Load category data from the "System Categories" note
+    async function getCategoryDataFromSystemNote(app) {
+      const note = await app.findNote({ name: "System Categories" });
+      if (!note) {
+        await app.alert("⚠️ Could not find 'System Categories' note.");
+        return null;
+      }
+
+      const content = await app.getNoteContent(note);
+      const match = content.match(/```json\n([\s\S]*?)```/);
+      if (!match) {
+        await app.alert("⚠️ Could not find a valid ```json block in 'System Categories'.");
+        return null;
+      }
+
+      try {
+        return JSON.parse(match[1]);
+      } catch (err) {
+        await app.alert("⚠️ Failed to parse category JSON:\n" + err.message);
+        return null;
+      }
+    }
+
     let note = await app.notes.find(noteUUID);
     if (!note) {
       await app.alert("❌ Could not find the current note.");
       return;
     }
 
-    // === Step 0: Bootstrap untagged notes ===
+    // === Step 0: Bootstrap new notes with no tags ===
     if (note.tags.length === 0) {
       const setupResult = await app.prompt(`Set up new note: "${note.name}"`, {
         inputs: [
@@ -705,7 +729,7 @@
               { label: "Home", value: "d/home" },
               { label: "Work", value: "d/work" }
             ],
-            value: "" // Default to None
+            value: ""
           },
           {
             label: "Note Type",
@@ -720,18 +744,12 @@
         ]
       });
 
-      // Exit if user canceled
       if (!setupResult) return;
 
       const [domainTag, noteType] = setupResult;
-
-      // Add domain tag if selected
       if (domainTag) await note.addTag(domainTag);
 
-      // Add default type tag
-      let typeTag = "";
-      let templateName = "";
-
+      let typeTag = "", templateName = "";
       switch (noteType) {
         case "project":
           typeTag = "project/active";
@@ -751,11 +769,8 @@
           break;
       }
 
-      if (typeTag) {
-        await note.addTag(typeTag);
-      }
+      if (typeTag) await note.addTag(typeTag);
 
-      // Insert template at the end of the note
       if (templateName) {
         const templateNote = await app.findNote({ name: templateName });
         if (!templateNote) {
@@ -765,17 +780,18 @@
           await app.insertNoteContent({ uuid: note.uuid }, content, { atEnd: true });
         }
       }
-    } // end bootstrap of untagged notes
+    }
 
-    // Refetch the note to ensure updated tags/content are recognized
+    // Refetch the note to make sure new tags/content are included
     note = await app.notes.find(noteUUID);
 
     const isProjectNote = note.tags.some(t => t.startsWith("project/"));
     const currentRelations = await plugin.getReadableRelationships(app, note);
+    const categoryData = await getCategoryDataFromSystemNote(app);
 
     const inputs = [];
 
-    // If project note — add status & parent
+    // === Add project-specific inputs ===
     if (isProjectNote) {
       inputs.push({
         label: "Project Status",
@@ -792,14 +808,60 @@
           { label: "Canceled", value: "project/canceled" }
         ]
       });
-
       inputs.push({ label: "Parent Project", type: "note" });
     }
 
-    // Add relationship
+    // === Add dynamic category dropdowns if category data is available ===
+    if (categoryData) {
+      if (note.tags.some(t => t.startsWith("reference/people/"))) {
+        inputs.push({
+          label: "People Category",
+          type: "select",
+          options: [
+            { label: "", value: "" },
+            ...categoryData.people.map(tag => ({
+              label: tag,
+              value: "reference/people/" + tag
+            }))
+          ]
+        });
+      }
+
+      if (note.tags.some(t => t.startsWith("reference/software/"))) {
+        inputs.push({
+          label: "Software Category",
+          type: "select",
+          options: [
+            { label: "", value: "" },
+            ...categoryData.software.map(tag => ({
+              label: tag,
+              value: "reference/software/" + tag
+            }))
+          ]
+        });
+      }
+
+      if (
+        note.tags.some(t => t.startsWith("reference/")) &&
+        !note.tags.some(t => t.startsWith("reference/people/") || t.startsWith("reference/software/"))
+      ) {
+        inputs.push({
+          label: "Reference Category",
+          type: "select",
+          options: [
+            { label: "", value: "" },
+            ...categoryData.reference.map(tag => ({
+              label: tag,
+              value: "reference/" + tag
+            }))
+          ]
+        });
+      }
+    }
+
+    // === Add relationship options ===
     inputs.push({ label: "Add Relationship", type: "note" });
 
-    // Remove relationship
     if (currentRelations.length > 0) {
       inputs.push({
         label: "Remove Relationship",
@@ -811,32 +873,39 @@
       });
     }
 
-    // Debug: show built inputs before prompt
-    // await app.alert("Inputs:\n" + JSON.stringify(inputs, null, 2));
-
-    // Prompt with Continue action
+    // === Show prompt ===
     const result = await app.prompt(`Set tags for "${note.name}"`, {
       inputs,
-      actions: [
-        { label: "Continue", value: "continue" }
-      ]
+      actions: [{ label: "Continue", value: "continue" }]
     });
 
-    if (!result) return; // cancel
+    if (!result) return;
 
     const actionValue = result[result.length - 1];
     const actionWasContinue = actionValue === "continue";
 
-    // Parse values in order
+    // === Parse responses ===
     let idx = 0;
     const getNext = () => result[idx++];
 
     const projectStatusValue = isProjectNote ? getNext() : null;
     const parentProjectValue = isProjectNote ? getNext() : null;
+
+    const peopleCategoryValue = categoryData && note.tags.some(t => t.startsWith("reference/people/")) ? getNext() : null;
+    const softwareCategoryValue = categoryData && note.tags.some(t => t.startsWith("reference/software/")) ? getNext() : null;
+    const referenceCategoryValue =
+      categoryData &&
+      note.tags.some(t => t.startsWith("reference/")) &&
+      !note.tags.some(t => t.startsWith("reference/people/") || t.startsWith("reference/software/"))
+        ? getNext()
+        : null;
+
     const addRelationshipValue = getNext();
     const removeRelationshipValue = currentRelations.length > 0 ? getNext() : null;
 
     // === Apply changes ===
+
+    // Project status
     if (isProjectNote && projectStatusValue) {
       const oldStatus = note.tags.find(t => t.startsWith("project/"));
       if (oldStatus) await note.removeTag(oldStatus);
@@ -850,10 +919,37 @@
       }
     }
 
+    // Parent project
     if (isProjectNote && parentProjectValue?.uuid) {
       await plugin.setParentChildRelationship(app, noteUUID, parentProjectValue.uuid);
     }
 
+    // People category
+    if (peopleCategoryValue) {
+      const old = note.tags.find(t => t.startsWith("reference/people/"));
+      if (old) await note.removeTag(old);
+      await note.addTag(peopleCategoryValue);
+    }
+
+    // Software category
+    if (softwareCategoryValue) {
+      const old = note.tags.find(t => t.startsWith("reference/software/"));
+      if (old) await note.removeTag(old);
+      await note.addTag(softwareCategoryValue);
+    }
+
+    // Reference category
+    if (referenceCategoryValue) {
+      const old = note.tags.find(t =>
+        t.startsWith("reference/") &&
+        !t.startsWith("reference/people/") &&
+        !t.startsWith("reference/software/")
+      );
+      if (old) await note.removeTag(old);
+      await note.addTag(referenceCategoryValue);
+    }
+
+    // Relationships
     if (addRelationshipValue?.uuid) {
       await plugin.addRelationshipByType(app, note, addRelationshipValue);
     }
@@ -865,20 +961,13 @@
       }
     }
 
-    // Refresh related sections
+    // === Refresh related note sections ===
     const domainTags = note.tags.filter(t => t.startsWith("d/"));
-    const summary = await this.updateAllRelatedSections(app, noteUUID, domainTags);
+    await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
 
-    /*
-    await app.alert(
-      `✅ Tags updated for "${note.name}"\n` +
-      `Sections refreshed: ${summary.updatedSections}\n` +
-      `Total items updated: ${summary.totalItems}`
-    );
-    */
-
+    // === Loop if requested ===
     if (actionWasContinue) {
-      await this.setNoteTags(app, noteUUID);
+      await plugin.setNoteTags(app, noteUUID);
     }
   }, // end setNoteTags
 
