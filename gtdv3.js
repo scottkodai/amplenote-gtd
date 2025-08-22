@@ -601,31 +601,32 @@
     const plugin = this;
 
     /**
-     * Helper function to extract unique subtags (categories) from notes
-     * @param {string} baseTag - The tag prefix to filter by (e.g., "reference/people")
-     * @param {string[]} excludeSubtags - Top-level subtags to exclude (used for generic "reference" scan)
-     * @returns {Promise<string[]>} - A sorted array of unique category strings
+     * Extracts unique category subtags from reference-type notes
+     * Handles nested tags like "reference/travel/gartner" and "reference/technical"
+     *
+     * @param {string} baseTag - e.g., "reference", "reference/people"
+     * @param {string[]} excludeFirstLevel - Top-level subtypes to ignore (e.g., ["people", "software"])
+     * @returns {Promise<string[]>} - Sorted list of subtags (e.g., ["technical", "travel", "travel/gartner"])
      */
-    async function getReferenceCategories(baseTag, excludeSubtags = []) {
+    async function getReferenceCategories(baseTag, excludeFirstLevel = []) {
       const notes = await app.filterNotes({ tag: baseTag });
       const categories = new Set();
 
       for (let note of notes) {
         for (let tag of note.tags) {
           if (tag.startsWith(baseTag + "/")) {
-            const parts = tag.split("/");
-            const topLevel = parts[1];                    // e.g., "people", "software"
-            const subtag = parts.slice(2).join("/");      // e.g., "it-staff", "general", etc.
+            // Extract everything after the baseTag
+            const subtag = tag.split("/").slice(baseTag.split("/").length).join("/"); // flexible for "reference" or "reference/people"
+            const first = subtag.split("/")[0];
 
-            // Skip if excluded or if subtag is empty
-            if (!excludeSubtags.includes(topLevel) && subtag) {
+            if (!excludeFirstLevel.includes(first) && subtag) {
               categories.add(subtag);
             }
           }
         }
       }
 
-      return Array.from(categories).sort(); // Return sorted array for consistency
+      return Array.from(categories).sort();
     }
 
     // === Step 1: Collect categories for each note type ===
