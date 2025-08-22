@@ -586,8 +586,89 @@
       section: { heading: { text: "Tagging Cleanup" } }
     });
 
+    // Update the System Categories note, which is used by setNoteTags to build category lists
+    await plugin.updateSystemCategories(app);
+
     // await app.alert("✅ Tagging Cleanup section updated in Inbox.");
   }, // end taggingCleanup
+
+  // ===============================================================================================
+  // updateSystemCategories iterates through reference categories and builds a list to 
+  // populate the System Categories note that will be used by the setNoteTags function to
+  // set categories on people, software, and reference notes
+  // ===============================================================================================
+  updateSystemCategories: async function(app) {
+    const plugin = this;
+
+    /**
+     * Helper function to extract unique subtags (categories) from notes
+     * @param {string} baseTag - The tag prefix to filter by (e.g., "reference/people")
+     * @param {string[]} excludeSubtags - Top-level subtags to exclude (used for generic "reference" scan)
+     * @returns {Promise<string[]>} - A sorted array of unique category strings
+     */
+    async function getReferenceCategories(baseTag, excludeSubtags = []) {
+      const notes = await app.filterNotes({ tag: baseTag });
+      const categories = new Set();
+
+      for (let note of notes) {
+        for (let tag of note.tags) {
+          if (tag.startsWith(baseTag + "/")) {
+            const parts = tag.split("/");
+            const topLevel = parts[1];                    // e.g., "people", "software"
+            const subtag = parts.slice(2).join("/");      // e.g., "it-staff", "general", etc.
+
+            // Skip if excluded or if subtag is empty
+            if (!excludeSubtags.includes(topLevel) && subtag) {
+              categories.add(subtag);
+            }
+          }
+        }
+      }
+
+      return Array.from(categories).sort(); // Return sorted array for consistency
+    }
+
+    // === Step 1: Collect categories for each note type ===
+    const peopleCats = await getReferenceCategories("reference/people");
+    const softwareCats = await getReferenceCategories("reference/software");
+    const refCats = await getReferenceCategories("reference", ["people", "software"]);
+
+    // Build final JSON structure
+    const categoryData = {
+      people: peopleCats,
+      software: softwareCats,
+      reference: refCats
+    };
+
+    // === Step 2: Locate the "System: Categories" note ===
+    const categoryNote = await app.findNote({ name: "System Categories" });
+
+    if (!categoryNote) {
+      await app.alert("❌ Could not find 'System: Categories' note.");
+      return;
+    }
+
+    const content = await app.getNoteContent(categoryNote);
+
+    // === Step 3: Replace or append the ```json block ===
+    const newJsonBlock = "```json\n" + JSON.stringify(categoryData, null, 2) + "\n```";
+
+    let newContent;
+    const jsonBlockRegex = /```json[\s\S]*?```/;
+
+    if (jsonBlockRegex.test(content)) {
+      // Replace the existing json block
+      newContent = content.replace(jsonBlockRegex, newJsonBlock);
+    } else {
+      // Append json block to end of note
+      newContent = content + "\n\n" + newJsonBlock;
+    }
+
+    // === Step 4: Save the updated note ===
+    await app.setNoteContent(categoryNote, newContent);
+
+    await app.alert("✅ Categories updated in 'System: Categories' note.");
+  }, // end updateSystemCategories
 
 // =================================================================================================
 // =================================================================================================
