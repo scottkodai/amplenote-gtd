@@ -665,7 +665,7 @@
     }
 
     // === Step 4: Save the updated note ===
-    await app.setNoteContent(categoryNote, newContent);
+    await app.replaceNoteContent(categoryNote, newContent);
 
     await app.alert("✅ Categories updated in 'System: Categories' note.");
   }, // end updateSystemCategories
