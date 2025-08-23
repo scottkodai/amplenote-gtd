@@ -1254,24 +1254,28 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
   }, //end updateAllRelatedSections
 
   // ===============================================================================================
-  // Updates any bracketed text sections with links to all related notes
-  // Called from: 
+  // Replaces only bracketed sections in a list note (e.g., [focus], [completed])
+  // Builds either a flat list or nested project hierarchy based on list type
+  // Called from: "Update Lists" plugin action
   // ===============================================================================================
   updateBracketedSections: async function (app, note, listType, domainTags = []) {
     const plugin = this;
+
+    // Get all markdown sections in the note
     const sections = await app.getNoteSections({ uuid: note.uuid });
 
-    let totalUpdated = 0;
-    let totalCount = 0;
+    let totalUpdated = 0; // Number of sections modified
+    let totalCount = 0;   // Total number of notes inserted
 
     for (const section of sections) {
+      // Skip any section that doesn't have a [bracketed] tag
       if (!section.heading || !section.heading.text.includes("[")) continue;
 
       const match = section.heading.text.match(/\[([^\]]+)\]/);
       if (!match) continue;
-      const subtag = match[1]; // e.g., "focus", "it-leadership"
+      const subtag = match[1]; // Extract subtag from brackets, e.g. [focus]
 
-      // Figure out the base tag for filtering
+      // Determine base tag based on list type and bracketed subtag
       let baseTag = "";
       switch (listType) {
         case "list/project":
@@ -1288,64 +1292,46 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
           break;
       }
 
-      // Get all notes with the base tag (filtered by domain)
-      let matchingNotes = await this.getFilteredNotes(app, baseTag, domainTags);
+      // Fetch all notes matching the base tag and filtered by domain
+      let matchingNotes = await plugin.getFilteredNotes(app, baseTag, domainTags);
 
-      // Build the section content differently depending on list type
-      let md = "";
+      let md = ""; // Markdown output to insert into section
 
+      // Special case: list/project — render nested project hierarchy
       if (listType === "list/project") {
-        const sortCompletedByDate = subtag === "completed";
+        const sortCompletedByDate = subtag === "completed"; // Only applies to completed section
 
-        matchingNotes = matchingNotes
-          .filter(n => n.tags.some(t => t.startsWith("project/")))
-          .sort((a, b) => {
-            if (sortCompletedByDate) {
-              const getDateTag = n =>
-                n.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
-              return getDateTag(b).localeCompare(getDateTag(a)); // newest first
-            } else {
-              return a.name.localeCompare(b.name);
-            }
-          });
+        // Only include notes that are actually projects
+        matchingNotes = matchingNotes.filter(n =>
+          n.tags.some(t => t.startsWith("project/"))
+        );
 
-        const formatter = new Intl.DateTimeFormat("en-US", {
-          year: "numeric",
-          month: "short"
+        // Use nested builder for parent/child display (also handles completed project dates)
+        md = await plugin.buildNestedProjectList(app, {
+          baseNotes: matchingNotes,
+          groupByStatus: "flat",         // One section = one status (no grouping needed)
+          includeChildren: true,         // Always show child projects
+          format: "standard",            // Placeholder for future formats
+          sortCompletedByDate            // Sort only if this is a [completed] section
         });
 
-        md = matchingNotes.length
-          ? await Promise.all(matchingNotes.map(async (note) => {
-              const handle = plugin.normalizeNoteHandle(note);
-              let label = `[${handle.name}](${handle.url})`;
-
-              if (sortCompletedByDate) {
-                const dateTag = handle.tags.find(t => t.startsWith("project/completed/"));
-                const yyyymm = dateTag?.split("/")[2];
-                if (/^\d{6}$/.test(yyyymm)) {
-                  const year = yyyymm.slice(0, 4);
-                  const month = yyyymm.slice(4);
-                  const dateObj = new Date(`${year}-${month}-15`);
-                  label += ` (${formatter.format(dateObj)})`;
-                } else if (yyyymm) {
-                  label += ` (${yyyymm})`;
-                }
-              }
-
-              return `- ${label}`;
-            })).then(lines => lines.join("\n"))
-          : "- _No matching notes_";
+        // Fallback if no notes found
+        if (!md.trim()) {
+          md = "- _No matching notes_";
+        }
 
       } else {
-        // Sort alphabetically by note name
+        // All other list types — render flat list sorted alphabetically
         matchingNotes.sort((a, b) => a.name.localeCompare(b.name));
-        // Simple flat list for other types
+
         md = matchingNotes.length
-          ? matchingNotes.map(n => `- [${n.name}](https://www.amplenote.com/notes/${n.uuid})`).join("\n")
+          ? matchingNotes.map(n =>
+              `- [${n.name}](https://www.amplenote.com/notes/${n.uuid})`
+            ).join("\n")
           : "- _No matching notes_";
       }
 
-      // Replace section content
+      // Replace content in this section only (leaves other note content untouched)
       await app.replaceNoteContent(note.uuid, md, {
         section: { heading: { text: section.heading.text } }
       });
@@ -1354,6 +1340,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       totalCount += matchingNotes.length;
     }
 
+    // Return stats for user alert/logging
     return { updatedSections: totalUpdated, totalItems: totalCount };
   }, // end updateBracketedSections
 
