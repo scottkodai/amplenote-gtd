@@ -538,7 +538,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       t.startsWith("list/") ||
       t.startsWith("project/") ||
       t.startsWith("reference/") ||
-      ["person", "software", "vendor", "horizon"].includes(t)
+      ["people", "software", "vendor", "horizon"].includes(t)
     );
     if (!tag) return null;
 
