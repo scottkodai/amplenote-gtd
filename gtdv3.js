@@ -724,12 +724,14 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
     // === Step 1: Collect categories for each note type ===
     const peopleCats = await getReferenceCategories("reference/people");
     const softwareCats = await getReferenceCategories("reference/software");
-    const refCats = await getReferenceCategories("reference", ["people", "software"]);
+    const horizonCats = await getReferenceCategories("reference/horizon");
+    const refCats = await getReferenceCategories("reference", ["people", "software", "horizon"]);
 
     // Build final JSON structure
     const categoryData = {
       people: peopleCats,
       software: softwareCats,
+      horizon: horizonCats,
       reference: refCats
     };
 
