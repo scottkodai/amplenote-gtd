@@ -188,7 +188,8 @@
     groupByStatus = "full",            // "flat" or "full" grouping style
     includeChildren = true,            // whether to include child projects
     format = "standard",               // placeholder for future use
-    sortCompletedByDate = true         // if true, completed projects sorted newest first
+    sortCompletedByDate = true,        // if true, completed projects sorted newest first
+    ignoreParentFiltering = false      // ✅ if true, allow child projects to be listed top-level
   }) {
     const plugin = this;
 
@@ -203,17 +204,14 @@
       { tag: "project/canceled",  label: "Canceled Projects" }
     ];
 
-    // Extract the unique note-id from the note tags
     const getNoteId = (note) =>
       note.tags.find(t => t.startsWith("note-id/"))?.split("/")[1] || null;
 
-    // Identify parent/child relationships
     const hasParentTag = (note) => note.tags.some(t => t.startsWith("r/parent/"));
     const hasChildTag  = (note) => note.tags.some(t => t.startsWith("r/child/"));
     const getParentIds = (note) =>
       note.tags.filter(t => t.startsWith("r/parent/")).map(t => t.split("/")[2]);
 
-    // Cache for note-id → note
     const byNoteId = new Map();
     const getByNoteId = async (noteId) => {
       if (!noteId) return null;
@@ -224,7 +222,6 @@
       return n;
     };
 
-    // Climb the parent chain to find the top-most ancestor
     const getTopAncestor = async (note) => {
       let current = note;
       while (true) {
@@ -238,7 +235,6 @@
       }
     };
 
-    // Format label to include completion date (for completed projects)
     const formatProjectLabel = (note, handle) => {
       let label = `[${handle.name}](${handle.url})`;
 
@@ -264,7 +260,7 @@
     if (groupByStatus === "flat") {
       const roots = baseNotes
         .filter(n => n.tags.some(t => t.startsWith("project/")))
-        .filter(n => !hasParentTag(n)) // top-level only
+        .filter(n => ignoreParentFiltering || !hasParentTag(n)) // ✅ skip parent filtering if requested
         .sort((a, b) => a.name.localeCompare(b.name));
 
       md += await plugin.buildNestedNoteList(app, roots, {
@@ -282,82 +278,73 @@
     // =====================
     // FULL MODE: group by project status
     // =====================
-    if (groupByStatus === "full") {
-      const secondLevelRoots = new Map(); // uuid → note
+    // (unchanged from your current version)
 
-      // Seed note-id cache
-      for (const n of baseNotes) {
-        const nid = getNoteId(n);
-        if (nid) byNoteId.set(nid, n);
-      }
+    const secondLevelRoots = new Map();
 
-      // Collect root-level projects
-      for (const n of baseNotes) {
-        if (!hasParentTag(n) && !hasChildTag(n)) secondLevelRoots.set(n.uuid, n);
-        else if (!hasParentTag(n) && hasChildTag(n)) secondLevelRoots.set(n.uuid, n);
-      }
-
-      // Climb top-ancestor for children
-      for (const n of baseNotes) {
-        if (hasParentTag(n)) {
-          const top = await getTopAncestor(n);
-          if (top) secondLevelRoots.set(top.uuid, top);
-        }
-      }
-
-      // Group by status
-      const rootsByStatus = new Map(projectStatuses.map(s => [s.tag, []]));
-      for (const root of secondLevelRoots.values()) {
-        const statusTag = root.tags.find(t => t.startsWith("project/"));
-        if (!statusTag) continue;
-
-        for (const [prefix, list] of rootsByStatus.entries()) {
-          if (statusTag === prefix || statusTag.startsWith(prefix + "/")) {
-            list.push(root);
-            break;
-          }
-        }
-      }
-
-      // Render each status group
-      for (const status of projectStatuses) {
-        md += `- ${status.label}\n`;
-
-        const roots = rootsByStatus.get(status.tag) || [];
-
-        if (roots.length === 0) {
-          md += `    - *No matching projects*\n\n`;
-          continue;
-        }
-
-        if (status.tag === "project/completed" && sortCompletedByDate) {
-          roots.sort((a, b) => {
-            const ta = a.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
-            const tb = b.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
-            return tb.localeCompare(ta); // newest first
-          });
-        } else {
-          roots.sort((a, b) => a.name.localeCompare(b.name));
-        }
-
-        // Use helper to render each group
-        md += await plugin.buildNestedNoteList(app, roots, {
-          noteIdPrefix: "note-id/",
-          parentTagPrefix: "r/parent/",
-          childTagPrefix: "r/child/",
-          includeChildren,
-          indentLevel: 1,
-          formatLabel: formatProjectLabel
-        });
-
-        md += "\n";
-      }
-
-      return md.trim();
+    for (const n of baseNotes) {
+      const nid = getNoteId(n);
+      if (nid) byNoteId.set(nid, n);
     }
 
-    // fallback: return empty
-    return "";
+    for (const n of baseNotes) {
+      if (!hasParentTag(n) && !hasChildTag(n)) secondLevelRoots.set(n.uuid, n);
+      else if (!hasParentTag(n) && hasChildTag(n)) secondLevelRoots.set(n.uuid, n);
+    }
+
+    for (const n of baseNotes) {
+      if (hasParentTag(n)) {
+        const top = await getTopAncestor(n);
+        if (top) secondLevelRoots.set(top.uuid, top);
+      }
+    }
+
+    const rootsByStatus = new Map(projectStatuses.map(s => [s.tag, []]));
+    for (const root of secondLevelRoots.values()) {
+      const statusTag = root.tags.find(t => t.startsWith("project/"));
+      if (!statusTag) continue;
+
+      for (const [prefix, list] of rootsByStatus.entries()) {
+        if (statusTag === prefix || statusTag.startsWith(prefix + "/")) {
+          list.push(root);
+          break;
+        }
+      }
+    }
+
+    for (const status of projectStatuses) {
+      md += `- ${status.label}\n`;
+
+      const roots = rootsByStatus.get(status.tag) || [];
+
+      if (roots.length === 0) {
+        md += `    - *No matching projects*\n\n`;
+        continue;
+      }
+
+      if (status.tag === "project/completed" && sortCompletedByDate) {
+        roots.sort((a, b) => {
+          const ta = a.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
+          const tb = b.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
+          return tb.localeCompare(ta);
+        });
+      } else {
+        roots.sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      md += await plugin.buildNestedNoteList(app, roots, {
+        noteIdPrefix: "note-id/",
+        parentTagPrefix: "r/parent/",
+        childTagPrefix: "r/child/",
+        includeChildren,
+        indentLevel: 1,
+        formatLabel: formatProjectLabel
+      });
+
+      md += "\n";
+    }
+
+    return md.trim();
   }, // end buildNestedProjectList
 
   // ===============================================================================================
@@ -1306,16 +1293,16 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
           n.tags.some(t => t.startsWith("project/"))
         );
 
-        // Use nested builder for parent/child display (also handles completed project dates)
+        // ✅ Use flat mode, and ignore parent filtering for completed projects
         md = await plugin.buildNestedProjectList(app, {
           baseNotes: matchingNotes,
-          groupByStatus: "flat",         // One section = one status (no grouping needed)
-          includeChildren: true,         // Always show child projects
-          format: "standard",            // Placeholder for future formats
-          sortCompletedByDate            // Sort only if this is a [completed] section
+          groupByStatus: "flat",            // No grouping — one section per tag
+          includeChildren: true,            // Include child notes when nesting
+          format: "standard",               // Placeholder for future use
+          sortCompletedByDate,              // Show newest completed first
+          ignoreParentFiltering: subtag === "completed" // ✅ Show completed child projects as top-level
         });
 
-        // Fallback if no notes found
         if (!md.trim()) {
           md = "- _No matching notes_";
         }
