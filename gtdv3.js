@@ -1228,8 +1228,8 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       { name: "Related People", fn: this.updateRelatedPeopleSection },
       { name: "Related References", fn: this.updateRelatedReferencesSection },
       { name: "Related Software", fn: this.updateRelatedSoftwareSection },
-      { name: "Parent Projects", fn: this.updateParentProjectsSection },
-      { name: "Child Projects", fn: this.updateChildProjectsSection }
+      { name: "Parent Notes", fn: this.updateParentNotesSection },
+      { name: "Child Notes", fn: this.updateChildNotesSection }
     ];
 
     let totalUpdated = 0;
@@ -1356,8 +1356,8 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
   // are always within the same domain. Add domainTags filter if that changes.
   // Called from: 
   // ===============================================================================================
-  updateChildProjectsSection: async function(app, noteUUID) {
-    const sectionHeading = "Child Projects";
+  updateChildNotesSection: async function(app, noteUUID) {
+    const sectionHeading = "Child Notess";
 
     const sections = await app.getNoteSections({ uuid: noteUUID });
     const targetSection = sections.find(s =>
@@ -1370,7 +1370,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
 
     const childList = children.length
       ? children.map(n => `- [${n.name}](${n.url})`).join("\n")
-      : "_(No child projects)_";
+      : "_(No child notes)_";
 
     await app.replaceNoteContent(noteUUID, childList, {
       section: { heading: { text: sectionHeading } }
@@ -1385,8 +1385,8 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
   // are always within the same domain. Add domainTags filter if that changes.
   // Called from: 
   // ===============================================================================================
-  updateParentProjectsSection: async function(app, noteUUID) {
-    const sectionHeading = "Parent Projects";
+  updateParentNotesSection: async function(app, noteUUID) {
+    const sectionHeading = "Parent Notes";
 
     const sections = await app.getNoteSections({ uuid: noteUUID });
     const targetSection = sections.find(s =>
@@ -1399,7 +1399,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
 
     const parentList = parents.length
       ? parents.map(n => `- [${n.name}](${n.url})`).join("\n")
-      : "_(No parent projects)_";
+      : "_(No parent notes)_";
 
     await app.replaceNoteContent(noteUUID, parentList, {
       section: { heading: { text: sectionHeading } }
