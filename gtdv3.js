@@ -613,6 +613,39 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       cleanupResults.push({ reason: "Uncategorized reference notes", notes: uncategorized });
     }
 
+    // H: Mismatched parent/child types
+    const notesWithRelationships = allNotes.filter(n =>
+      n.tags.some(t => t.startsWith("r/parent/") || t.startsWith("r/child/"))
+    );
+
+    const mismatches = [];
+
+    for (const note of notesWithRelationships) {
+      const thisType = plugin.getNoteType(note);
+      const relationshipTags = note.tags.filter(t => t.startsWith("r/parent/") || t.startsWith("r/child/"));
+
+      for (const tag of relationshipTags) {
+        const targetId = tag.split("/")[2];
+        if (!targetId) continue;
+
+        const related = allNotes.find(n => n.tags.includes(`note-id/${targetId}`));
+        if (!related) continue;
+
+        const relatedType = plugin.getNoteType(related);
+        if (thisType && relatedType && thisType !== relatedType) {
+          mismatches.push(note);
+          mismatches.push(related);
+        }
+      }
+    }
+
+    if (mismatches.length > 0) {
+      cleanupResults.push({
+        reason: "Mismatched parent/child note types",
+        notes: mismatches
+      });
+    }
+
     // Build Markdown for the Tagging Cleanup section
     let md = "";
     if (cleanupResults.length === 0) {
