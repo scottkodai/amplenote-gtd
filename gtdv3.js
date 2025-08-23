@@ -516,6 +516,10 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
     );
     if (!tag) return null;
 
+    if (tag.startsWith("project/")) {
+      return "project";
+    }    
+
     if (tag.startsWith("reference/")) {
       const subtype = tag.split("/")[1];
       if (["people", "software", "vendor", "horizon"].includes(subtype)) {
