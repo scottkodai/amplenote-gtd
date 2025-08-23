@@ -1908,7 +1908,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       // Track how many we change
       let renamedCount = 0;
 
-      await app.alert("Notes to rename: " + JSON.stringify(softwareNotes));
+      //await app.alert("Notes to rename: " + JSON.stringify(softwareNotes));
 
       for (const handle of softwareNotes) {
         const note = await app.notes.find(handle.uuid);
@@ -1916,7 +1916,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
 
         // 2. Update the note title
         const newName = `Software: ${note.name}`;
-        //await note.setName(newName);
+        await note.setName(newName);
         renamedCount++;
       }
 
