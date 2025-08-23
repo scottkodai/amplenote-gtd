@@ -827,6 +827,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
               { label: "Project", value: "project" },
               { label: "People", value: "people" },
               { label: "Software", value: "software" },
+              { label: "Horizon", value: "horizon" },
               { label: "Reference", value: "reference" }
             ]
           }
@@ -851,6 +852,10 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
         case "software":
           typeTag = "reference/software/uncategorized";
           templateName = "Software Heading Template";
+          break;
+        case "horizon":
+          typeTag = "reference/horizon/uncategorized";
+          templateName = "Horizon Heading Template";
           break;
         case "reference":
           typeTag = "reference/uncategorized";
@@ -901,7 +906,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
           { label: "Canceled", value: "project/canceled" }
         ]
       });
-      inputs.push({ label: "Parent Project", type: "note" });
+      inputs.push({ label: "Parent Note", type: "note" });
     }
     if (isPeopleNote || isSoftwareNote || isHorizonNote) {
       inputs.push({ label: "Parent Note", type: "note" });
