@@ -1896,32 +1896,6 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       await app.alert("After: " + JSON.stringify(updatedNote.tags));
     }, // end Test Two Adds
 */
-    // ===============================================================================================
-    // Prepends "Software: " to all software note titles if not already present
-    // ===============================================================================================
-    "Prefix Software Titles": async function (app) {
-      const plugin = this;
-
-      // 1. Get all software-related notes (excluding archive/exclude)
-      const softwareNotes = await plugin.getFilteredNotes(app, "reference/software");
-
-      // Track how many we change
-      let renamedCount = 0;
-
-      //await app.alert("Notes to rename: " + JSON.stringify(softwareNotes));
-
-      for (const handle of softwareNotes) {
-        const note = await app.notes.find(handle.uuid);
-        if (!note || note.name.startsWith("Software: ")) continue;
-
-        // 2. Update the note title
-        const newName = `Software: ${note.name}`;
-        await note.setName(newName);
-        renamedCount++;
-      }
-
-      await app.alert(`✅ Updated ${renamedCount} software note titles.`);
-    }, // end Prefix Software Titles
 
     // ===============================================================================================
     // Collects deadline tasks to display on the daily jot
