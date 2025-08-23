@@ -632,6 +632,8 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
         if (!related) continue;
 
         const relatedType = plugin.getNoteType(related);
+        
+        // ✅ Only compare simplified base types (like 'project', 'people', 'software')
         if (thisType && relatedType && thisType !== relatedType) {
           mismatches.push(note);
           mismatches.push(related);
