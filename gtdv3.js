@@ -260,8 +260,16 @@
     if (groupByStatus === "flat") {
       const roots = baseNotes
         .filter(n => n.tags.some(t => t.startsWith("project/")))
-        .filter(n => ignoreParentFiltering || !hasParentTag(n)) // ✅ skip parent filtering if requested
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .filter(n => ignoreParentFiltering || !hasParentTag(n))
+        .sort((a, b) => {
+          if (sortCompletedByDate) {
+            const getDate = n =>
+              n.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2] || "";
+            return getDate(b).localeCompare(getDate(a)); // newest first
+          } else {
+            return a.name.localeCompare(b.name);
+          }
+        });
 
       md += await plugin.buildNestedNoteList(app, roots, {
         noteIdPrefix: "note-id/",
