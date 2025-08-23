@@ -115,177 +115,189 @@
   }, // end getAllTasks
 
   // ===============================================================================================
-  // Build a nested list of project notes, respecting r/parent/* and r/child/* relationships
-  // Parameters:
-  // - groupByStatus: "full" (status headers), "flat" (one combined list), "weeklyReview" (future)
-  // - includeChildren: true/false (whether to recurse into children)
-  // - format: "standard" or "weeklyReview"
-  // - sortCompletedByDate: true/false (special sort for completed projects by YYYYMM tag)
+  // Recursively build a nested list of related notes, using parent/child tag relationships.
+  // Optional: customize how each note is displayed using formatLabel(note, handle).
+  // ===============================================================================================  
+  buildNestedNoteList: async function(app, notes, options) {
+    const plugin = this;
+    const {
+      noteIdPrefix = "note-id/",           // tag used to uniquely identify a note (e.g., "note-id/20250823...")
+      parentTagPrefix = "r/parent/",       // tag prefix used on child notes to point to their parent
+      childTagPrefix = "r/child/",         // not currently used (included for symmetry)
+      includeChildren = true,              // whether to include child notes
+      indentLevel = 0,                     // how far to indent this level of the list
+      visited = new Set(),                 // keeps track of rendered notes to avoid infinite loops
+      formatLabel = null                   // optional function to customize the label text
+    } = options;
+
+    // Helper: extract the note ID from a tag like "note-id/20250823104500"
+    const getNoteId = (note) =>
+      note.tags.find(t => t.startsWith(noteIdPrefix))?.split("/")[1] || null;
+
+    const normalize = plugin.normalizeNoteHandle; // returns { name, url, tags }
+    const indent = "    ".repeat(indentLevel);    // 4 spaces per level
+    let output = "";
+
+    for (const note of notes) {
+      if (!note) continue;
+
+      // Skip notes we've already rendered (prevents cycles)
+      if (visited.has(note.uuid)) continue;
+      visited.add(note.uuid);
+
+      // Format the basic bullet label
+      const handle = normalize(note);
+      let label = `[${handle.name}](${handle.url})`;
+
+      // Allow custom formatting of the label (e.g., show completion date)
+      if (typeof formatLabel === "function") {
+        label = formatLabel(note, handle);
+      }
+
+      // Render the note as a bullet point
+      output += `${indent}- ${label}\n`;
+
+      // If not rendering children, move to next note
+      if (!includeChildren) continue;
+
+      const noteId = getNoteId(note);
+      if (!noteId) continue;
+
+      // Find notes that reference this one as their parent
+      const children = await plugin.getFilteredNotes(app, `${parentTagPrefix}${noteId}`);
+      children.sort((a, b) => a.name.localeCompare(b.name));
+
+      // Recursively build list for child notes
+      const childMarkdown = await plugin.buildNestedNoteList(app, children, {
+        ...options,
+        indentLevel: indentLevel + 1,
+        visited: new Set(visited) // clone set to allow shared children across branches
+      });
+
+      output += childMarkdown;
+    }
+
+    return output;
+  }, // end buildNestedNoteList
+
+  // ===============================================================================================
+  // Build a nested list of projects from the provided notes, grouped by status if requested
   // ===============================================================================================
   buildNestedProjectList: async function(app, {
-    baseNotes,
-    groupByStatus = "full",
-    includeChildren = true,
-    format = "standard",
-    sortCompletedByDate = true
+    baseNotes,                          // array of notes to include in the list
+    groupByStatus = "full",            // "flat" or "full" grouping style
+    includeChildren = true,            // whether to include child projects
+    format = "standard",               // placeholder for future use
+    sortCompletedByDate = true         // if true, completed projects sorted newest first
   }) {
     const plugin = this;
 
     const projectStatuses = [
-      { tag: "project/focus",    label: "Focus Projects" },
-      { tag: "project/active",   label: "Active Projects" },
-      { tag: "project/tracking", label: "Tracking Projects" },
-      { tag: "project/on-hold",  label: "On Hold Projects" },
-      { tag: "project/future",   label: "Future Projects" },
-      { tag: "project/someday",  label: "Someday Projects" },
-      { tag: "project/completed",label: "Completed Projects" },
-      { tag: "project/canceled", label: "Canceled Projects" }
+      { tag: "project/focus",     label: "Focus Projects" },
+      { tag: "project/active",    label: "Active Projects" },
+      { tag: "project/tracking",  label: "Tracking Projects" },
+      { tag: "project/on-hold",   label: "On Hold Projects" },
+      { tag: "project/future",    label: "Future Projects" },
+      { tag: "project/someday",   label: "Someday Projects" },
+      { tag: "project/completed", label: "Completed Projects" },
+      { tag: "project/canceled",  label: "Canceled Projects" }
     ];
 
-    // --- helpers for tags/ids ---
+    // Extract the unique note-id from the note tags
     const getNoteId = (note) =>
       note.tags.find(t => t.startsWith("note-id/"))?.split("/")[1] || null;
 
-    const hasParentTag = (note) =>
-      note.tags.some(t => t.startsWith("r/parent/"));
-
-    const hasChildTag = (note) =>
-      note.tags.some(t => t.startsWith("r/child/"));
-
+    // Identify parent/child relationships
+    const hasParentTag = (note) => note.tags.some(t => t.startsWith("r/parent/"));
+    const hasChildTag  = (note) => note.tags.some(t => t.startsWith("r/child/"));
     const getParentIds = (note) =>
       note.tags.filter(t => t.startsWith("r/parent/")).map(t => t.split("/")[2]);
 
-    // Cache note-id -> note
+    // Cache for note-id → note
     const byNoteId = new Map();
     const getByNoteId = async (noteId) => {
       if (!noteId) return null;
-      if (byNoteId.has(noteId)) return byNoteId.get(noteId) || null;
+      if (byNoteId.has(noteId)) return byNoteId.get(noteId);
       const matches = await plugin.getFilteredNotes(app, `note-id/${noteId}`);
       const n = matches?.[0] || null;
       byNoteId.set(noteId, n);
       return n;
     };
 
-    // Ascend r/parent/* chain to the top-most ancestor
+    // Climb the parent chain to find the top-most ancestor
     const getTopAncestor = async (note) => {
       let current = note;
       while (true) {
-        const parents = getParentIds(current);
-        if (parents.length === 0) return current; // reached a top-level (no r/parent/*)
-        // If multiple parents, just pick first for "top ancestor" (child can still render under
-        // multiple parents during recursion). This is only for picking second-level roots.
-        const firstParentId = parents[0];
-        const p = await getByNoteId(firstParentId);
-        if (!p) return current; // parent tag points to missing note-id, stop
-        current = p;
+        const parentIds = getParentIds(current);
+        if (parentIds.length === 0) return current;
+
+        const firstParent = await getByNoteId(parentIds[0]);
+        if (!firstParent) return current;
+
+        current = firstParent;
       }
     };
 
-    // Render a project (then its children)
-    const renderProject = async (note, indentLevel = 0, visited = new Set()) => {
-      if (!note) return "";
-      if (visited.has(note.uuid)) return "";         // guard cycles
-      visited.add(note.uuid);
-
-      const handle = plugin.normalizeNoteHandle(note);
-      const indent = "    ".repeat(indentLevel);
-
+    // Format label to include completion date (for completed projects)
+    const formatProjectLabel = (note, handle) => {
       let label = `[${handle.name}](${handle.url})`;
 
-      // Pull out the subtag from the project/completed tag and add it to the label
-      // in human readable format (Jul 2025 rather than 202507)
-      if (handle.tags.some(t => t.startsWith("project/completed/"))) {
-        const dateTag = handle.tags.find(t => t.startsWith("project/completed/"));
-        const yyyymm = dateTag?.split("/")[2];
-        if (/^\d{6}$/.test(yyyymm)) {
-          const year = yyyymm.slice(0, 4);
-          const month = yyyymm.slice(4);
-          const dateObj = new Date(`${year}-${month}-15`); //using the 15th to avoid time zone rolling to previous month
-          const formatter = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short" });
-          label += ` (${formatter.format(dateObj)})`; // e.g., (Jul 2025)
-        } else if (yyyymm) {
-          label += ` (${yyyymm})`; // fallback
-        }
+      const dateTag = handle.tags.find(t => t.startsWith("project/completed/"))?.split("/")[2];
+      if (dateTag && /^\d{6}$/.test(dateTag)) {
+        const year = dateTag.slice(0, 4);
+        const month = dateTag.slice(4);
+        const dateObj = new Date(`${year}-${month}-15`);
+        const formatter = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short" });
+        label += ` (${formatter.format(dateObj)})`;
+      } else if (dateTag) {
+        label += ` (${dateTag})`;
       }
 
-      let md = `${indent}- ${label}\n`;
-
-//      let md = `${indent}- [${handle.name}](${handle.url})\n`;
-
-      if (format === "weeklyReview") {
-        // placeholder for next feature
-        md += `${indent}    - Status: TBD\n`;
-      }
-
-      if (includeChildren) {
-        const noteId = getNoteId(note);
-        if (noteId) {
-          // Children are notes with r/parent/<this note-id>
-          const children = await plugin.getFilteredNotes(app, `r/parent/${noteId}`);
-          // Only include children that are project notes
-          const projChildren = children.filter(c => c.tags.some(t => t.startsWith("project/")));
-          projChildren.sort((a, b) => a.name.localeCompare(b.name));
-          for (const c of projChildren) {
-            // fresh visited for multi-parent rendering
-            md += await renderProject(c, indentLevel + 1, new Set(visited));
-          }
-        }
-      }
-      return md;
+      return label;
     };
 
     let md = "";
 
-    // =========================
-    // FLAT MODE (list/project)
-    // =========================
-    if (groupByStatus === "flat" || groupByStatus === "weeklyReview") {
-      // For flat lists, roots are:
-      // - standalone (no r/parent/* AND no r/child/*), OR
-      // - top-level parents (has r/child/* AND no r/parent/*)
+    // =====================
+    // FLAT MODE: no status grouping
+    // =====================
+    if (groupByStatus === "flat") {
       const roots = baseNotes
-        .filter(n => n.tags.some(t => t.startsWith("project/"))) // project notes only
-        .filter(n => !hasParentTag(n)) // no r/parent/* => standalone OR top-level parent
+        .filter(n => n.tags.some(t => t.startsWith("project/")))
+        .filter(n => !hasParentTag(n)) // top-level only
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      for (const root of roots) {
-        md += await renderProject(root, 0);
-      }
+      md += await plugin.buildNestedNoteList(app, roots, {
+        noteIdPrefix: "note-id/",
+        parentTagPrefix: "r/parent/",
+        childTagPrefix: "r/child/",
+        includeChildren,
+        indentLevel: 0,
+        formatLabel: formatProjectLabel
+      });
 
       return md.trim();
     }
 
-    // =========================
-    // FULL MODE (list/related or Update Note)
-    // =========================
+    // =====================
+    // FULL MODE: group by project status
+    // =====================
     if (groupByStatus === "full") {
-      // Build the second-level root set from "related" baseNotes:
-      // - include any standalone from baseNotes (no r/parent/* and no r/child/*)
-      // - include any top-level parent from baseNotes (has r/child/* but no r/parent/*)
-      // - for any child in baseNotes (has r/parent/*), climb to its top ancestor and include that ancestor
-      const secondLevelRoots = new Map(); // uuid -> note
+      const secondLevelRoots = new Map(); // uuid → note
 
-      // Seed: everything in baseNotes might be needed for recursion, cache their note-ids
+      // Seed note-id cache
       for (const n of baseNotes) {
         const nid = getNoteId(n);
         if (nid) byNoteId.set(nid, n);
       }
 
-      // 1) Standalone in baseNotes
+      // Collect root-level projects
       for (const n of baseNotes) {
-        if (!hasParentTag(n) && !hasChildTag(n)) {
-          secondLevelRoots.set(n.uuid, n);
-        }
+        if (!hasParentTag(n) && !hasChildTag(n)) secondLevelRoots.set(n.uuid, n);
+        else if (!hasParentTag(n) && hasChildTag(n)) secondLevelRoots.set(n.uuid, n);
       }
 
-      // 2) Top-level parents in baseNotes
-      for (const n of baseNotes) {
-        if (!hasParentTag(n) && hasChildTag(n)) {
-          secondLevelRoots.set(n.uuid, n);
-        }
-      }
-
-      // 3) For child projects in baseNotes, hoist their top ancestor
+      // Climb top-ancestor for children
       for (const n of baseNotes) {
         if (hasParentTag(n)) {
           const top = await getTopAncestor(n);
@@ -293,28 +305,30 @@
         }
       }
 
-      // Group second-level roots by their own status
+      // Group by status
       const rootsByStatus = new Map(projectStatuses.map(s => [s.tag, []]));
       for (const root of secondLevelRoots.values()) {
         const statusTag = root.tags.find(t => t.startsWith("project/"));
-        if (statusTag) {
-          for (const [statusPrefix, bucket] of rootsByStatus.entries()) {
-            if (
-              statusTag === statusPrefix ||
-              statusTag.startsWith(statusPrefix + "/")
-            ) {
-              bucket.push(root);
-              break;
-            }
+        if (!statusTag) continue;
+
+        for (const [prefix, list] of rootsByStatus.entries()) {
+          if (statusTag === prefix || statusTag.startsWith(prefix + "/")) {
+            list.push(root);
+            break;
           }
-        }        
+        }
       }
 
-      // Render each status bucket
+      // Render each status group
       for (const status of projectStatuses) {
         md += `- ${status.label}\n`;
 
-        let roots = rootsByStatus.get(status.tag) || [];
+        const roots = rootsByStatus.get(status.tag) || [];
+
+        if (roots.length === 0) {
+          md += `    - *No matching projects*\n\n`;
+          continue;
+        }
 
         if (status.tag === "project/completed" && sortCompletedByDate) {
           roots.sort((a, b) => {
@@ -326,21 +340,24 @@
           roots.sort((a, b) => a.name.localeCompare(b.name));
         }
 
-        if (roots.length === 0) {
-          md += `    - *No matching projects*\n\n`;
-        } else {
-          for (const root of roots) {
-            md += await renderProject(root, 1);
-          }
-          md += `\n`;
-        }
+        // Use helper to render each group
+        md += await plugin.buildNestedNoteList(app, roots, {
+          noteIdPrefix: "note-id/",
+          parentTagPrefix: "r/parent/",
+          childTagPrefix: "r/child/",
+          includeChildren,
+          indentLevel: 1,
+          formatLabel: formatProjectLabel
+        });
+
+        md += "\n";
       }
 
       return md.trim();
     }
 
-    // Fallback
-    return md.trim();
+    // fallback: return empty
+    return "";
   }, // end buildNestedProjectList
 
   // ===============================================================================================
@@ -564,7 +581,7 @@
     if (noParent.length > 0) {
       cleanupResults.push({ reason: "Child projects with no parent project", notes: noParent });
     }
-    
+
     // G: Uncategorized reference notes
     const uncategorizedTags = [
       "reference/uncategorized",
