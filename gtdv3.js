@@ -1357,7 +1357,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
   // Called from: 
   // ===============================================================================================
   updateChildNotesSection: async function(app, noteUUID) {
-    const sectionHeading = "Child Notess";
+    const sectionHeading = "Child Notes";
 
     const sections = await app.getNoteSections({ uuid: noteUUID });
     const targetSection = sections.find(s =>
