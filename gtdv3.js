@@ -415,32 +415,46 @@
     return children;
   }, // end getChildNotes
 
-  // ===============================================================================================
-  // Establishes a parent/child relationship between two notes (intented for project notes).
-  // Ensures both notes have a note-id tag, then adds:
-  //   - r/child/<parent-note-id> to the child note
-  //   - r/parent/<parent-note-id> to the parent note
-  // Called from: 
-  // ===============================================================================================
-  setParentChildRelationship: async function (app, childUUID, parentUUID) {
+// ===============================================================================================
+// Establishes a parent/child relationship between two notes.
+// Ensures both notes have a note-id tag, and confirms both notes are of the same type.
+// Supported types: project, reference/people, reference/software, reference/horizon
+// ===============================================================================================
+setParentChildRelationship: async function (app, childUUID, parentUUID) {
+  const plugin = this;
 
-    // Load notes
-    const child = await app.notes.find(childUUID);
-    const parent = await app.notes.find(parentUUID);
-    if (!child) throw new Error("Child note not found.");
-    if (!parent) throw new Error("Parent note not found.");
+  // 1. Load notes
+  const child = await app.notes.find(childUUID);
+  const parent = await app.notes.find(parentUUID);
+  if (!child || !parent) {
+    await app.alert("❌ Could not find parent or child note.");
+    return;
+  }
 
-    // Ensure both have note-ids
-    const childIdTag = await this.getNoteIdTag(app, child);
-    const childId = childIdTag.split("/")[1];
-    const parentIdTag = await this.getNoteIdTag(app, parent);
-    const parentId = parentIdTag.split("/")[1];
+  // 2. Get note types
+  const childType = plugin.getNoteType(child);
+  const parentType = plugin.getNoteType(parent);
 
-    // Add relationship tags (child note gets a tag identifying its parent; parent note
-    // gets a tag identifying its child(ren))
-    await child.addTag(`r/parent/${parentId}`);
-    await parent.addTag(`r/child/${childId}`);
-  }, // end setParentChildRelationship
+  // 3. Enforce type matching
+  if (childType !== parentType) {
+    await app.alert(`❌ Cannot link ${child.name} to ${parent.name}: note types do not match.\n\n` +
+      `• Child is type: ${childType || "unknown"}\n` +
+      `• Parent is type: ${parentType || "unknown"}\n\n` +
+      `Parent/child relationships must be between notes of the same type.`);
+    return;
+  }
+
+  // 4. Ensure both have note-id tags
+  const childIdTag = await plugin.getNoteIdTag(app, child);
+  const childId = childIdTag.split("/")[1];
+  const parentIdTag = await plugin.getNoteIdTag(app, parent);
+  const parentId = parentIdTag.split("/")[1];
+
+  // 5. Add tags for parent/child relationship
+  await child.addTag(`r/parent/${parentId}`);
+  await parent.addTag(`r/child/${childId}`);
+}, // end setParentChildRelationship
+
 
   // ===============================================================================================
   // Returns a note's note-id tag if it exists, creating it if necessary. This function is only
@@ -820,6 +834,10 @@
     note = await app.notes.find(noteUUID);
 
     const isProjectNote = note.tags.some(t => t.startsWith("project/"));
+    const isPeopleNote = note.tags.some(t => t.startsWith("reference/people/"));
+    const isSoftwareNote = note.tags.some(t => t.startsWith("reference/software/"));
+    const isHorizonNote = note.tags.some(t => t.startsWith("reference/horizon/"));
+
     const currentRelations = await plugin.getReadableRelationships(app, note);
     const categoryData = await getCategoryDataFromSystemNote(app);
 
@@ -843,6 +861,9 @@
         ]
       });
       inputs.push({ label: "Parent Project", type: "note" });
+    }
+    if (isPeopleNote || isSoftwareNote || isHorizonNote) {
+      inputs.push({ label: "Parent Note", type: "note" });
     }
 
     // === Add dynamic category dropdowns if category data is available ===
@@ -875,9 +896,23 @@
         });
       }
 
+      if (note.tags.some(t => t.startsWith("reference/horizon/"))) {
+        inputs.push({
+          label: "Horizon Category",
+          type: "select",
+          options: [
+            { label: "", value: "" },
+            ...categoryData.horizon.map(tag => ({
+              label: tag,
+              value: "reference/horizon/" + tag
+            }))
+          ]
+        });
+      }
+
       if (
         note.tags.some(t => t.startsWith("reference/")) &&
-        !note.tags.some(t => t.startsWith("reference/people/") || t.startsWith("reference/software/"))
+        !note.tags.some(t => t.startsWith("reference/people/") || t.startsWith("reference/software/") || t.startsWith("reference/horizon/"))
       ) {
         inputs.push({
           label: "Reference Category",
@@ -924,13 +959,16 @@
 
     const projectStatusValue = isProjectNote ? getNext() : null;
     const parentProjectValue = isProjectNote ? getNext() : null;
+    const parentReferenceValue = (isPeopleNote || isSoftwareNote || isHorizonNote) ? getNext() : null;
 
     const peopleCategoryValue = categoryData && note.tags.some(t => t.startsWith("reference/people/")) ? getNext() : null;
     const softwareCategoryValue = categoryData && note.tags.some(t => t.startsWith("reference/software/")) ? getNext() : null;
+    const horizonCategoryValue = categoryData && note.tags.some(t => t.startsWith("reference/horizon/")) ? getNext() : null;
+
     const referenceCategoryValue =
       categoryData &&
       note.tags.some(t => t.startsWith("reference/")) &&
-      !note.tags.some(t => t.startsWith("reference/people/") || t.startsWith("reference/software/"))
+      !note.tags.some(t => t.startsWith("reference/people/") || t.startsWith("reference/software/") || t.startsWith("reference/horizon/"))
         ? getNext()
         : null;
 
@@ -958,6 +996,11 @@
       await plugin.setParentChildRelationship(app, noteUUID, parentProjectValue.uuid);
     }
 
+    // Parent people, software, or horizon
+    if ((isPeopleNote || isSoftwareNote || isHorizonNote) && parentReferenceValue?.uuid) {
+      await plugin.setParentChildRelationship(app, noteUUID, parentReferenceValue.uuid);
+    }
+
     // People category
     if (peopleCategoryValue) {
       const old = note.tags.find(t => t.startsWith("reference/people/"));
@@ -972,12 +1015,20 @@
       await note.addTag(softwareCategoryValue);
     }
 
+    // Horizon category
+    if (horizonCategoryValue) {
+      const old = note.tags.find(t => t.startsWith("reference/horizon/"));
+      if (old) await note.removeTag(old);
+      await note.addTag(horizonCategoryValue);
+    }
+
     // Reference category
     if (referenceCategoryValue) {
       const old = note.tags.find(t =>
         t.startsWith("reference/") &&
         !t.startsWith("reference/people/") &&
-        !t.startsWith("reference/software/")
+        !t.startsWith("reference/software/") &&
+        !t.startsWith("reference/horizon/")
       );
       if (old) await note.removeTag(old);
       await note.addTag(referenceCategoryValue);
