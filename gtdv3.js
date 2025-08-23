@@ -181,6 +181,37 @@
   }, // end buildNestedNoteList
 
   // ===============================================================================================
+  // Builds a nested list of reference notes (people, software, or horizon)
+  // ===============================================================================================
+  buildNestedReferenceList: async function(app, {
+    baseNotes,                         // array of reference notes
+    noteType = "people",               // one of: "people", "software", "horizon"
+    includeChildren = true,           // whether to show nested child notes
+    indentLevel = 0                   // optional starting indent
+  }) {
+    const plugin = this;
+
+    const noteIdPrefix = "note-id/";
+    const parentTagPrefix = "r/parent/";
+    const childTagPrefix = "r/child/";
+
+    // Helper to filter notes of the correct type
+    const filtered = baseNotes.filter(n => plugin.getNoteType(n) === noteType);
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+    const md = await plugin.buildNestedNoteList(app, filtered, {
+      noteIdPrefix,
+      parentTagPrefix,
+      childTagPrefix,
+      includeChildren,
+      indentLevel,
+      formatLabel: (note, handle) => `[${handle.name}](${handle.url})`
+    });
+
+    return md.trim();
+  }, // end buildNestedReferenceList
+
+  // ===============================================================================================
   // Build a nested list of projects from the provided notes, grouped by status if requested
   // ===============================================================================================
   buildNestedProjectList: async function(app, {
@@ -1249,28 +1280,27 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
   }, //end updateAllRelatedSections
 
   // ===============================================================================================
-  // Replaces only bracketed sections in a list note (e.g., [focus], [completed])
-  // Builds either a flat list or nested project hierarchy based on list type
-  // Called from: "Update Lists" plugin action
+  // Updates sections in a list note that use [bracketed] subtags to display dynamic content
   // ===============================================================================================
   updateBracketedSections: async function (app, note, listType, domainTags = []) {
     const plugin = this;
 
-    // Get all markdown sections in the note
+    // Fetch all section headings from the note
     const sections = await app.getNoteSections({ uuid: note.uuid });
 
-    let totalUpdated = 0; // Number of sections modified
-    let totalCount = 0;   // Total number of notes inserted
+    let totalUpdated = 0; // Tracks how many sections were updated
+    let totalCount = 0;   // Tracks how many notes were inserted across all sections
 
     for (const section of sections) {
-      // Skip any section that doesn't have a [bracketed] tag
+      // Skip sections without bracketed text in their headings
       if (!section.heading || !section.heading.text.includes("[")) continue;
 
       const match = section.heading.text.match(/\[([^\]]+)\]/);
       if (!match) continue;
-      const subtag = match[1]; // Extract subtag from brackets, e.g. [focus]
 
-      // Determine base tag based on list type and bracketed subtag
+      const subtag = match[1]; // Extract the subtag from brackets, e.g., "focus" from [focus]
+
+      // Determine which tag prefix to use based on list type and subtag
       let baseTag = "";
       switch (listType) {
         case "list/project":
@@ -1282,41 +1312,72 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
         case "list/people":
           baseTag = `reference/people/${subtag}`;
           break;
+        case "list/horizon":
+          baseTag = `reference/horizon/${subtag}`;
+          break;
         case "list/reference":
           baseTag = `reference/${subtag}`;
           break;
       }
 
-      // Fetch all notes matching the base tag and filtered by domain
+      // Fetch all notes matching the baseTag, filtered by domain
       let matchingNotes = await plugin.getFilteredNotes(app, baseTag, domainTags);
 
-      let md = ""; // Markdown output to insert into section
+      let md = ""; // Markdown output to insert into this section
 
-      // Special case: list/project — render nested project hierarchy
+      // -------------------------------------------------------------------------------------------
+      // 🗂 Special rendering for project list — uses nested hierarchy with grouping options
+      // -------------------------------------------------------------------------------------------
       if (listType === "list/project") {
-        const sortCompletedByDate = subtag === "completed"; // Only applies to completed section
+        const sortCompletedByDate = subtag === "completed"; // Sort completed by date
 
-        // Only include notes that are actually projects
+        // Filter to only project notes
         matchingNotes = matchingNotes.filter(n =>
           n.tags.some(t => t.startsWith("project/"))
         );
 
-        // ✅ Use flat mode, and ignore parent filtering for completed projects
+        // Render nested list using buildNestedProjectList
         md = await plugin.buildNestedProjectList(app, {
           baseNotes: matchingNotes,
-          groupByStatus: "flat",            // No grouping — one section per tag
-          includeChildren: true,            // Include child notes when nesting
-          format: "standard",               // Placeholder for future use
-          sortCompletedByDate,              // Show newest completed first
-          ignoreParentFiltering: subtag === "completed" // ✅ Show completed child projects as top-level
+          groupByStatus: "flat",                     // One section per tag (e.g., [active], [completed])
+          includeChildren: true,                     // Include child projects nested
+          format: "standard",                        // Future expansion
+          sortCompletedByDate,                       // Only apply date sort to completed section
+          ignoreParentFiltering: sortCompletedByDate // Completed child projects shown as top-level
         });
 
         if (!md.trim()) {
           md = "- _No matching notes_";
         }
 
+      // -------------------------------------------------------------------------------------------
+      // 🧑 Nested people, software, and horizon lists
+      // -------------------------------------------------------------------------------------------
+      } else if (
+        listType === "list/people" ||
+        listType === "list/software" ||
+        listType === "list/horizon"
+      ) {
+        const noteType = listType.split("/")[1]; // "people", "software", or "horizon"
+
+        // Only include notes that match the requested type
+        matchingNotes = matchingNotes.filter(n => plugin.getNoteType(n) === noteType);
+
+        // Render nested list using buildNestedReferenceList
+        md = await plugin.buildNestedReferenceList(app, {
+          baseNotes: matchingNotes,
+          noteType,
+          includeChildren: true
+        });
+
+        if (!md.trim()) {
+          md = "- _No matching notes_";
+        }
+
+      // -------------------------------------------------------------------------------------------
+      // 📃 Default flat alphabetical list
+      // -------------------------------------------------------------------------------------------
       } else {
-        // All other list types — render flat list sorted alphabetically
         matchingNotes.sort((a, b) => a.name.localeCompare(b.name));
 
         md = matchingNotes.length
@@ -1326,7 +1387,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
           : "- _No matching notes_";
       }
 
-      // Replace content in this section only (leaves other note content untouched)
+      // Replace the content inside just this section (preserves rest of note)
       await app.replaceNoteContent(note.uuid, md, {
         section: { heading: { text: section.heading.text } }
       });
@@ -1335,7 +1396,7 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       totalCount += matchingNotes.length;
     }
 
-    // Return stats for user alert/logging
+    // Return a summary of updates for logging or user feedback
     return { updatedSections: totalUpdated, totalItems: totalCount };
   }, // end updateBracketedSections
 
