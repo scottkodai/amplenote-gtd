@@ -183,33 +183,41 @@
   // ===============================================================================================
   // Builds a nested list of reference notes (people, software, or horizon)
   // ===============================================================================================
-  buildNestedReferenceList: async function(app, {
-    baseNotes,                         // array of reference notes
-    noteType = "people",               // one of: "people", "software", "horizon"
-    includeChildren = true,           // whether to show nested child notes
-    indentLevel = 0                   // optional starting indent
-  }) {
-    const plugin = this;
+buildNestedReferenceList: async function(app, {
+  baseNotes,                         // array of reference notes
+  noteType = "people",               // one of: "people", "software", "horizon"
+  includeChildren = true,            // whether to show nested child notes
+  indentLevel = 0                    // optional starting indent level
+}) {
+  const plugin = this;
 
-    const noteIdPrefix = "note-id/";
-    const parentTagPrefix = "r/parent/";
-    const childTagPrefix = "r/child/";
+  const noteIdPrefix = "note-id/";
+  const parentTagPrefix = "r/parent/";
+  const childTagPrefix = "r/child/";
 
-    // Helper to filter notes of the correct type
-    const filtered = baseNotes.filter(n => plugin.getNoteType(n) === noteType);
-    filtered.sort((a, b) => a.name.localeCompare(b.name));
+  // Step 1: Only include notes of the specified type (e.g. "people")
+  const filtered = baseNotes.filter(n => plugin.getNoteType(n) === noteType);
 
-    const md = await plugin.buildNestedNoteList(app, filtered, {
-      noteIdPrefix,
-      parentTagPrefix,
-      childTagPrefix,
-      includeChildren,
-      indentLevel,
-      formatLabel: (note, handle) => `[${handle.name}](${handle.url})`
-    });
+  // Step 2: From those, exclude any notes that are declared children
+  const topLevel = filtered.filter(n =>
+    !n.tags.some(tag => tag.startsWith(parentTagPrefix))
+  );
 
-    return md.trim();
-  }, // end buildNestedReferenceList
+  // Step 3: Sort top-level notes alphabetically
+  topLevel.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Step 4: Build the nested markdown list
+  const md = await plugin.buildNestedNoteList(app, topLevel, {
+    noteIdPrefix,
+    parentTagPrefix,
+    childTagPrefix,
+    includeChildren,
+    indentLevel,
+    formatLabel: (note, handle) => `[${handle.name}](${handle.url})`
+  });
+
+  return md.trim();
+}, // end buildNestedReferenceList
 
   // ===============================================================================================
   // Build a nested list of projects from the provided notes, grouped by status if requested
