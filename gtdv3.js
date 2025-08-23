@@ -1903,13 +1903,13 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       const plugin = this;
 
       // 1. Get all software-related notes (excluding archive/exclude)
-      const softwareNotes = await plugin.getFilteredNotes(app, "software");
+      const softwareNotes = await plugin.getFilteredNotes(app, "reference/software");
 
       // Track how many we change
       let renamedCount = 0;
 
-      await app.alert("Notes to rename: " + json.stringify(softwareNotes));
-      
+      await app.alert("Notes to rename: " + JSON.stringify(softwareNotes));
+
       for (const handle of softwareNotes) {
         const note = await app.notes.find(handle.uuid);
         if (!note || note.name.startsWith("Software: ")) continue;
