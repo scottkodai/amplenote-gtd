@@ -1134,6 +1134,8 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
     if (actionWasContinue) {
       await plugin.setNoteTags(app, noteUUID);
     }
+    // run taggingCleanup to make sure it's current
+    await this.taggingCleanup(app);
   }, // end setNoteTags
 
   // ===============================================================
