@@ -805,6 +805,23 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
 // =================================================================================================
 // =================================================================================================
 
+  // ===============================================================================================
+  // Removes all tags from the specified note
+  // ===============================================================================================
+  clearAllTags: async function(app, noteUUID) {
+    const note = await app.notes.find(noteUUID);
+    if (!note) {
+      await app.alert("❌ Could not find the note.");
+      return;
+    }
+
+    for (const tag of note.tags) {
+      await note.removeTag(tag);
+    }
+
+    await app.alert(`✅ Cleared ${note.tags.length} tags from "${note.name}"`);
+  }, // end clearAllTags
+
   // ===============================================================
   // setNoteTags: function to allow user to manage tags via prompt
   // ===============================================================
@@ -1771,6 +1788,13 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
       }
       await this.setNoteTags(app, uuidMatch[1]);
     }, // end Set Note Tags
+
+    // ===============================================================================================
+    // Note option wrapper to clear all tags
+    // ===============================================================================================
+    "Clear Tags": async function(app, noteUUID) {
+      await this.clearAllTags(app, noteUUID);
+    }, // end Clear Tags
   }, // end linkOption
 
 
@@ -1889,6 +1913,13 @@ setParentChildRelationship: async function (app, childUUID, parentUUID) {
     "Run Tagging Cleanup": async function (app, noteUUID) {
       await this.taggingCleanup(app);
     }, // End Run Tagging Cleanup
+
+    // ===============================================================================================
+    // Note option wrapper to clear all tags
+    // ===============================================================================================
+    "Clear Tags": async function(app, noteUUID) {
+      await this.clearAllTags(app, noteUUID);
+    }, // end Clear Tags
 
 /*
     // ===============================================================================================
