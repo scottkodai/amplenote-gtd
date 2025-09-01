@@ -1938,7 +1938,7 @@
     if (results.length === 0) {
       await app.alert(`ℹ️ No mentions of "${projectNote.name}" found in "${jotNote.name}".`);
     } else {
-      const preview = results.join("\n\n---\n\n");
+      const preview = results.map(r => String(r)).join("\n\n---\n\n");
       await app.alert("✅ Pre-processor output:\n\n" + preview);
     }
   }, // end testPreprocessor
