@@ -2188,7 +2188,7 @@
   const plugin = this;
 
   // 1. Load the current note (assumed to be the project note)
-  const currNote = await app.notes.find(noteUUID);
+  const currNote = await app.findNote(noteUUID);
   if (!currNote) {
     await app.alert("❌ Could not find the current note.");
     return;
