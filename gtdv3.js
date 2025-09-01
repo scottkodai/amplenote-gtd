@@ -1800,12 +1800,12 @@
   // Preserves breadcrumb context (Heading → Parent Bullets → Project) and exact bullet formatting
   // Called from: summarizeRecentUpdates (before building the OpenAI prompt)
   // ===============================================================================================
-  preprocessDailyJotForProject: async function(app, jotNote, projectHandle) {
+  preprocessDailyJotForProject: async function(app, jotSelection, projectHandle) {
     const plugin = this;
     const results = [];
 
-    const dateLabel = jotNote.name;
-    const content = await app.getNoteContent(jotNote);
+    const dateLabel = jotSelection.name;
+    const content = await app.getNoteContent(jotSelection);
     const lines = content.split("\n");
 
     const projectUUID = projectHandle.uuid;
@@ -1905,14 +1905,8 @@
       return;
     }
 
-    const jotNote = await app.notes.find(jotSelection.uuid);
-    if (!jotNote) {
-      await app.alert("❌ Could not load the selected Daily Jot.");
-      return;
-    }
-
     // 3. Run preprocessor
-    const results = await plugin.preprocessDailyJotForProject(app, jotNote, projectHandle);
+    const results = await plugin.preprocessDailyJotForProject(app, jotSelection, projectHandle);
 
     // 4. Show results
     if (results.length === 0) {
