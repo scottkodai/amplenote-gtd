@@ -2172,7 +2172,7 @@
       const currNote = await app.findNote(noteUUID);
       const result = await this.summarizeRecentUpdates(app, currNote);
       if (result) {
-        await app.alert("🧪 Combined Output Ready:\n\n" + result);
+        await app.alert("🧪 Combined Output Ready:\n\n" + JSON.stringify(result));
       }
     }, // end Test Preprocessor
 
