@@ -1885,23 +1885,36 @@
       return;
     }
 
-    // 2. Prompt user to select a daily jot (so you can test against a specific one)
-    const jotNote = await app.prompt("Choose a Daily Jot to test pre-processing:", {
-      type: "note"
+    // 2. Prompt user to select a Daily Jot note
+    const jotSelection = await app.prompt("Select a Daily Jot to test pre-processing:", {
+      inputs: [
+        {
+          type: "note",
+          label: "Daily Jot"
+        }
+      ]
     });
+
+    if (!jotSelection) {
+      await app.alert("⚠️ No jot selected.");
+      return;
+    }
+
+    // jotSelection is a noteHandle for the chosen jot
+    const jotNote = await app.notes.find(jotSelection.uuid);
     if (!jotNote) {
-      await app.alert("⚠️ No daily jot selected.");
+      await app.alert("❌ Could not load the selected Daily Jot.");
       return;
     }
 
     // 3. Run the pre-processor
     const results = await plugin.preprocessDailyJotForProject(app, jotNote, projectNote);
 
-    // 4. Display the results in an alert (or console for debugging)
+    // 4. Display results
     if (results.length === 0) {
       await app.alert(`ℹ️ No mentions of "${projectNote.name}" found in "${jotNote.name}".`);
     } else {
-      const preview = results.join("\n\n---\n\n"); // separate blocks with dividers
+      const preview = results.join("\n\n---\n\n");
       await app.alert("✅ Pre-processor output:\n\n" + preview);
     }
   }, // end testPreprocessor
