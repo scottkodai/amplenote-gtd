@@ -1881,41 +1881,49 @@
   }, // end preprocessDailyJotForProject
 
   // ===============================================================================================
-  // Test harness for preprocessDailyJotForProject
-  // Called from: Note Actions menu (temporary, for debugging)
-  // Usage: Run on a project note. Prompts you to choose a daily jot to test against.
+  // Returns recent daily jots that reference the given project note
+  // Called from: summarizeRecentUpdates (replaces manual jot selection)
   // ===============================================================================================
-  testPreprocessor: async function(app, noteUUID) {
+  getRecentJotsReferencingProject: async function(app, projectHandle) {
     const plugin = this;
 
-    // 1. Load project noteHandle (not full note object!)
-    const projectHandle = await app.findNote({ uuid: noteUUID });
-    if (!projectHandle) {
-      await app.alert("❌ Could not find the current project note.");
-      return;
-    }
+    // 1. Get all noteHandles that reference this project note
+    const backlinks = await app.getNoteBacklinks(projectHandle);
 
-    // 2. Prompt user for jot
-    const jotSelection = await app.prompt("Select a Daily Jot to test pre-processing:", {
-      inputs: [{ type: "note", label: "Daily Jot" }]
+    // 2. Filter to only those tagged with 'daily-jots'
+    const jots = backlinks.filter(n => n.tags.includes("daily-jots"));
+
+    // 3. Limit to those updated in the last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const recent = jots.filter(n => {
+      const updatedAt = new Date(n.updated); // ISO 8601 format
+      return updatedAt >= sevenDaysAgo;
     });
 
-    if (!jotSelection) {
-      await app.alert("⚠️ No jot selected.");
+    return recent; // array of noteHandles
+  }, // end getRecentJotsReferencingProject
+
+  // Test function DELETE after use
+  testRecentJotsFilter: async function(app, noteUUID) {
+    const plugin = this;
+    const projectHandle = await app.findNote({ uuid: noteUUID });
+
+    if (!projectHandle) {
+      await app.alert("❌ Could not find project note.");
       return;
     }
 
-    // 3. Run preprocessor
-    const results = await plugin.preprocessDailyJotForProject(app, jotSelection, projectHandle);
+    const jots = await plugin.getRecentJotsReferencingProject(app, projectHandle);
 
-    // 4. Show results
-    if (results.length === 0) {
-      await app.alert(`ℹ️ No mentions of "${projectHandle.name}" found in "${jotNote.name}".`);
-    } else {
-      const safePreview = results.join("\n\n---\n\n").slice(0, 9500); // Truncate to avoid alert overflow
-      await app.alert("✅ Pre-processor output:\n\n" + safePreview);
-    }
-  }, // end testPreprocessor
+    const msg = jots.length === 0
+      ? "⚠️ No recent Daily Jots found referencing this project."
+      : "✅ Found the following jots:\n\n" + jots.map(j => `- ${j.name} (${j.updated})`).join("\n");
+
+    await app.alert(msg.slice(0, 9500)); // Truncate for alert safety
+  }, // end testRecentJotsFilter
+
 
 // #################################################################################################
 // #################################################################################################
@@ -2134,7 +2142,7 @@
     // Testing new functionality for AI updates
     // ===============================================================================================
     "Test Preprocessor": async function(app, noteUUID) {
-      await this.testPreprocessor(app, noteUUID);
+      await this.testRecentJotsFilter(app, noteUUID);
     }, // end Test Preprossor
 
     // ===============================================================================================
