@@ -1905,25 +1905,52 @@
     return recent; // array of noteHandles
   }, // end getRecentJotsReferencingProject
 
-  // Test function DELETE after use
-  testRecentJotsFilter: async function(app, noteUUID) {
+  // ===============================================================================================
+  // Summarizes recent updates for a given project
+  // Called from: future summarization actions (e.g., generateProjectSummary)
+  // Depends on: getRecentJotsReferencingProject, preprocessDailyJotForProject
+  // ===============================================================================================
+  async function summarizeRecentUpdates(app, projectHandle) {
     const plugin = this;
-    const projectHandle = await app.findNote({ uuid: noteUUID });
 
-    if (!projectHandle) {
-      await app.alert("❌ Could not find project note.");
-      return;
+    // Step 1: Get all recent jot noteHandles that backlink to the project
+    const jotHandles = await plugin.getRecentJotsReferencingProject(app, projectHandle);
+    if (jotHandles.length === 0) return null; // Nothing to summarize
+
+    // Step 2: Preprocess each jot to extract project-relevant excerpts
+    let allExcerpts = [];
+
+    for (const jotHandle of jotHandles) {
+      const excerpt = await plugin.preprocessDailyJotForProject(app, jotHandle, projectHandle);
+      if (excerpt && excerpt.trim() !== "") {
+        allExcerpts.push(excerpt.trim());
+      }
     }
 
-    const jots = await plugin.getRecentJotsReferencingProject(app, projectHandle);
+    // Step 3: Concatenate all excerpts into a single block for summarization
+    const preprocessedContent = allExcerpts.join("\n\n");
 
-    const msg = jots.length === 0
-      ? "⚠️ No recent Daily Jots found referencing this project."
-      : "✅ Found the following jots:\n\n" + jots.map(j => `- ${j.name} (${j.updated})`).join("\n");
+    if (!preprocessedContent) return null; // Still nothing found
 
-    await app.alert(msg.slice(0, 9500)); // Truncate for alert safety
-  }, // end testRecentJotsFilter
+    // Step 4: Build prompt for OpenAI
+    const projectName = projectHandle.name; // Used in the user prompt
+    const systemPrompt = `You are a project management assistant. Your job is to read daily updates and create concise summaries of project progress.`;
 
+    const userPrompt = `Summarize the following recent updates for the project "${projectName}". Group similar topics, focus on meaningful progress, and omit duplicate or trivial information.
+
+  Updates:
+  ${preprocessedContent}
+
+  Summary:`;
+
+    // Return both prompts for use in OpenAI API call
+    return {
+      systemPrompt,
+      userPrompt,
+      preprocessedContent,
+      projectName
+    };
+  } // end summarizeRecentUpdates
 
 // #################################################################################################
 // #################################################################################################
@@ -2142,7 +2169,10 @@
     // Testing new functionality for AI updates
     // ===============================================================================================
     "Test Preprocessor": async function(app, noteUUID) {
-      await this.testRecentJotsFilter(app, noteUUID);
+      const result = await plugin.summarizeRecentUpdates(app, projectHandle);
+      if (result) {
+        await app.alert("🧪 Combined Output Ready:\n\n" + result.preprocessedContent);
+      }
     }, // end Test Preprossor
 
     // ===============================================================================================
