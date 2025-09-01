@@ -1800,18 +1800,20 @@
   // Preserves breadcrumb context (Heading → Parent Bullets → Project) and exact bullet formatting
   // Called from: summarizeRecentUpdates (before building the OpenAI prompt)
   // ===============================================================================================
-  preprocessDailyJotForProject: async function(app, jotNote, projectNote) {
+  preprocessDailyJotForProject: async function(app, jotNote, projectHandle) {
     const plugin = this;
-    let results = [];
+    const results = [];
 
-    const dateLabel = jotNote.name; // e.g. "August 28, 2025"
+    const dateLabel = jotNote.name;
     const content = await app.getNoteContent(jotNote);
     const lines = content.split("\n");
 
-    let currentHeading = null;  // e.g. "Project Updates" or "Meetings"
-    let stack = [];              // breadcrumb stack for nested bullets
+    const projectUUID = projectHandle.uuid;
+    const projectName = projectHandle.name;
 
-    // Helper: count indentation (leading spaces before "- ")
+    let currentHeading = null;
+    let stack = [];
+
     function getIndent(line) {
       const match = line.match(/^(\s*)-/);
       return match ? match[1].length : 0;
@@ -1820,89 +1822,62 @@
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // -------------------------------------------------------------------------
-      // Step 1: Track headings (we only care about "Project Updates" and "Meetings")
-      // -------------------------------------------------------------------------
+      // -- Step 1: Track headings
       const headingMatch = line.match(/^#{1,6}\s+(.*)/);
       if (headingMatch) {
         const headingText = headingMatch[1].trim();
         if (headingText === "Project Updates" || headingText === "Meetings") {
           currentHeading = headingText;
         } else {
-          currentHeading = null; // ignore other headings
+          currentHeading = null;
         }
-        stack = []; // reset breadcrumb at new heading
+        stack = [];
         continue;
       }
 
-      // Skip lines outside relevant headings
       if (!currentHeading) continue;
 
-      // -------------------------------------------------------------------------
-      // Step 2: Track bullets and maintain breadcrumb stack
-      // -------------------------------------------------------------------------
+      // -- Step 2: Track bullets and breadcrumbs
       if (/^\s*-\s+/.test(line)) {
         const indent = getIndent(line);
-        const text = line.trim().slice(2); // strip "- "
+        const text = line.trim().slice(2);
 
-        // Pop stack until top has less indentation
         while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
           stack.pop();
         }
 
-        // Push this bullet on stack
         stack.push({ text, indent, raw: line });
 
-        // -----------------------------------------------------------------------
-        // Step 3: Detect if this bullet links to the target project note
-        // -----------------------------------------------------------------------
+        // -- Step 3: Match link to target project
         const linkMatch = line.match(/\(https:\/\/www\.amplenote\.com\/notes\/([a-f0-9-]+)\)/);
-        if (linkMatch && linkMatch[1] === projectNote.uuid) {
+        if (linkMatch && linkMatch[1] === projectUUID) {
           let childLines = [];
 
-          // Capture all indented child bullets
           for (let j = i + 1; j < lines.length; j++) {
             const nextLine = lines[j];
             if (/^\s*-\s+/.test(nextLine)) {
               const nextIndent = getIndent(nextLine);
               if (nextIndent > indent) {
-                childLines.push(nextLine.replace(/\s+$/, "")); // keep indentation, strip only trailing spaces
+                childLines.push(nextLine.replace(/\s+$/, ""));
               } else if (nextIndent <= indent) {
-                break; // stop at same or shallower level
+                break;
               }
             } else if (/^#{1,6}\s+/.test(nextLine)) {
-              break; // stop if another heading
+              break;
             }
           }
 
-          // Build breadcrumb (all parents except the project itself)
-          const breadcrumb = stack
-            .slice(0, -1)
-            .map(b => b.text)
-            .join(" → ");
-
+          const breadcrumb = stack.slice(0, -1).map(b => b.text).join(" → ");
           let contextLabel = currentHeading;
           if (breadcrumb) contextLabel += " → " + breadcrumb;
 
-          // Final block with preserved content
-          const block = `[${dateLabel} — ${contextLabel}]\nProject: ${projectNote.name}\n${childLines.join("\n")}`;
+          const block = `[${dateLabel} — ${contextLabel}]\nProject: ${projectName}\n${childLines.join("\n")}`;
           results.push(block);
         }
       }
     }
 
-    // At the very end of preprocessDailyJotForProject
-    // Sanity check: make sure every result is a string
-    for (let i = 0; i < results.length; i++) {
-      if (typeof results[i] !== "string") {
-        await app.alert(
-          `⚠️ preprocessDailyJotForProject is returning a non-string at index ${i}:\n\n` +
-          JSON.stringify(results[i], null, 2)
-        );
-      }
-    }
-
-    return results; // array of "[date — context]..." blocks
+    return results;
   }, // end preprocessDailyJotForProject
 
   // ===============================================================================================
@@ -1913,21 +1888,16 @@
   testPreprocessor: async function(app, noteUUID) {
     const plugin = this;
 
-    // 1. Load the project note (the note where you're running the action)
-    const projectNote = await app.notes.find(noteUUID);
-    if (!projectNote) {
+    // 1. Load project noteHandle (not full note object!)
+    const projectHandle = await app.findNote({ uuid: noteUUID });
+    if (!projectHandle) {
       await app.alert("❌ Could not find the current project note.");
       return;
     }
 
-    // 2. Prompt user to select a Daily Jot note
+    // 2. Prompt user for jot
     const jotSelection = await app.prompt("Select a Daily Jot to test pre-processing:", {
-      inputs: [
-        {
-          type: "note",
-          label: "Daily Jot"
-        }
-      ]
+      inputs: [{ type: "note", label: "Daily Jot" }]
     });
 
     if (!jotSelection) {
@@ -1935,22 +1905,21 @@
       return;
     }
 
-    // jotSelection is a noteHandle for the chosen jot
     const jotNote = await app.notes.find(jotSelection.uuid);
     if (!jotNote) {
       await app.alert("❌ Could not load the selected Daily Jot.");
       return;
     }
 
-    // 3. Run the pre-processor
-    const results = await plugin.preprocessDailyJotForProject(app, jotNote, projectNote);
+    // 3. Run preprocessor
+    const results = await plugin.preprocessDailyJotForProject(app, jotNote, projectHandle);
 
-    // 4. Display results
+    // 4. Show results
     if (results.length === 0) {
-      await app.alert(`ℹ️ No mentions of "${projectNote.name}" found in "${jotNote.name}".`);
+      await app.alert(`ℹ️ No mentions of "${projectHandle.name}" found in "${jotNote.name}".`);
     } else {
-      const preview = results.join("\n\n---\n\n");
-      await app.alert("✅ Pre-processor output:\n\n" + preview);
+      const safePreview = results.join("\n\n---\n\n").slice(0, 9500); // Truncate to avoid alert overflow
+      await app.alert("✅ Pre-processor output:\n\n" + safePreview);
     }
   }, // end testPreprocessor
 
