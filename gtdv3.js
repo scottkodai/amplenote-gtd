@@ -1792,6 +1792,122 @@
 
 // #################################################################################################
 // #################################################################################################
+//                             Summarization & Preprocessing Functions
+// #################################################################################################
+// #################################################################################################
+  // ===============================================================================================
+  // Pre-process a daily jot note into structured excerpts for project summarization
+  // Called from: summarizeRecentUpdates (before building the OpenAI prompt)
+  // Input: app (Amplenote app object), jotNote (note object for a daily jot), projectNote (note object)
+  // Output: Array of strings, each representing one [date — context] block with project-related content
+  // ===============================================================================================
+  preprocessDailyJotForProject: async function(app, jotNote, projectNote) {
+    const plugin = this;
+
+    // Store results to return later
+    let results = [];
+
+    // The jot title is always a human-readable date, e.g., "August 28, 2025"
+    const dateLabel = jotNote.name;
+
+    // Fetch jot content as sections (easier to walk through hierarchy than raw markdown)
+    const sections = await app.getNoteSections({ uuid: jotNote.uuid });
+
+    // Helper: recursively walk through bullets to find references to the project note
+    async function walkBullets(bullets, contextLabel = "") {
+      for (const bullet of bullets) {
+        const text = bullet.text || "";
+        const children = bullet.children || [];
+
+        // Detect if this bullet is a linked note (person, project, meeting, etc.)
+        const linkMatch = text.match(/\(https:\/\/www\.amplenote\.com\/notes\/([a-f0-9-]+)\)/);
+        let noteType = null;
+        let linkedNote = null;
+
+        if (linkMatch) {
+          linkedNote = await app.notes.find(linkMatch[1]);
+          if (linkedNote) {
+            noteType = plugin.getNoteType(linkedNote);
+          }
+        }
+
+        // Update context label if this is a top-level "context" bullet
+        // Example: Person note = "1:1 with Person: Lauri Henry"
+        //          Meeting note = "Meeting: IT Leadership Meeting"
+        //          Project note = "Project: Implement Purview in Box"
+        let currentContext = contextLabel;
+        if (noteType === "people") {
+          currentContext = `1:1 with Person: ${linkedNote.name}`;
+        } else if (noteType === "project") {
+          currentContext = `Project: ${linkedNote.name}`;
+        } else if (noteType === "horizon" || noteType === "software") {
+          currentContext = `${noteType.charAt(0).toUpperCase() + noteType.slice(1)}: ${linkedNote.name}`;
+        } else if (text.toLowerCase().includes("meeting")) {
+          currentContext = `Meeting: ${text.replace(/^\-\s*/, "")}`;
+        }
+
+        // If this bullet references the target project, collect its children as raw content
+        if (linkedNote && linkedNote.uuid === projectNote.uuid) {
+          let rawBullets = children.map(child => "- " + child.text).join("\n");
+          let block = `[${dateLabel} — ${currentContext}]\nProject: ${projectNote.name}\n${rawBullets}`;
+          results.push(block);
+        }
+
+        // Recurse into children (so we can find project references nested under people/meetings)
+        if (children.length > 0) {
+          await walkBullets(children, currentContext);
+        }
+      }
+    }
+
+    // Iterate through each section of the jot
+    for (const section of sections) {
+      if (section.bullets && section.bullets.length > 0) {
+        await walkBullets(section.bullets);
+      }
+    }
+
+    return results; // array of "[date — context]..." blocks
+  }, // end preprocessDailyJotForProject
+
+  // ===============================================================================================
+  // Test harness for preprocessDailyJotForProject
+  // Called from: Note Actions menu (temporary, for debugging)
+  // Usage: Run on a project note. Prompts you to choose a daily jot to test against.
+  // ===============================================================================================
+  testPreprocessor: async function(app, noteUUID) {
+    const plugin = this;
+
+    // 1. Load the project note (the note where you're running the action)
+    const projectNote = await app.notes.find(noteUUID);
+    if (!projectNote) {
+      await app.alert("❌ Could not find the current project note.");
+      return;
+    }
+
+    // 2. Prompt user to select a daily jot (so you can test against a specific one)
+    const jotNote = await app.prompt("Choose a Daily Jot to test pre-processing:", {
+      type: "note"
+    });
+    if (!jotNote) {
+      await app.alert("⚠️ No daily jot selected.");
+      return;
+    }
+
+    // 3. Run the pre-processor
+    const results = await plugin.preprocessDailyJotForProject(app, jotNote, projectNote);
+
+    // 4. Display the results in an alert (or console for debugging)
+    if (results.length === 0) {
+      await app.alert(`ℹ️ No mentions of "${projectNote.name}" found in "${jotNote.name}".`);
+    } else {
+      const preview = results.join("\n\n---\n\n"); // separate blocks with dividers
+      await app.alert("✅ Pre-processor output:\n\n" + preview);
+    }
+  }, // end testPreprocessor
+
+// #################################################################################################
+// #################################################################################################
 //                                          Link Actions
 // #################################################################################################
 // #################################################################################################
@@ -2002,6 +2118,13 @@
       await app.alert("After: " + JSON.stringify(updatedNote.tags));
     }, // end Test Two Adds
 */
+
+    // ===============================================================================================
+    // Testing new functionality for AI updates
+    // ===============================================================================================
+    "Test Preprocessor": async function(app, noteUUID) {
+      await this.testPreprocessor(app, noteUUID);
+    }, // end Test Preprossor
 
     // ===============================================================================================
     // Collects deadline tasks to display on the daily jot
