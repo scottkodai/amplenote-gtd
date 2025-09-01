@@ -1891,6 +1891,17 @@
       }
     }
 
+    // At the very end of preprocessDailyJotForProject
+    // Sanity check: make sure every result is a string
+    for (let i = 0; i < results.length; i++) {
+      if (typeof results[i] !== "string") {
+        await app.alert(
+          `⚠️ preprocessDailyJotForProject is returning a non-string at index ${i}:\n\n` +
+          JSON.stringify(results[i], null, 2)
+        );
+      }
+    }
+
     return results; // array of "[date — context]..." blocks
   }, // end preprocessDailyJotForProject
 
