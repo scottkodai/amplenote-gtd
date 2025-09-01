@@ -2171,8 +2171,19 @@
     "Test Preprocessor": async function(app, noteUUID) {
       const currNote = await app.findNote(noteUUID);
       const result = await this.summarizeRecentUpdates(app, currNote);
+
       if (result) {
-        await app.alert("🧪 Combined Output Ready:\n\n" + JSON.stringify(result));
+        const { systemPrompt, userPrompt } = result;
+
+        const fullPrompt = `🔒 SYSTEM PROMPT:
+    ${systemPrompt}
+
+    💬 USER PROMPT:
+    ${userPrompt}`;
+
+        await app.alert("🧪 Ready to copy:\n\n" + fullPrompt);
+      } else {
+        await app.alert("⚠️ No recent updates found to summarize.");
       }
     }, // end Test Preprocessor
 
