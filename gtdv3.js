@@ -1922,8 +1922,8 @@
 
     for (const jotHandle of jotHandles) {
       const excerpt = await plugin.preprocessDailyJotForProject(app, jotHandle, projectHandle);
-      if (excerpt && excerpt.trim() !== "") {
-        allExcerpts.push(excerpt.trim());
+      if (Array.isArray(excerpts) && excerpts.length > 0) {
+        allExcerpts.push(...excerpts.map(e => e.trim()));
       }
     }
 
