@@ -1797,73 +1797,97 @@
 // #################################################################################################
   // ===============================================================================================
   // Pre-process a daily jot note into structured excerpts for project summarization
+  // Preserves breadcrumb context (Heading → Parent Bullets → Project) and exact bullet formatting
   // Called from: summarizeRecentUpdates (before building the OpenAI prompt)
-  // Input: app (Amplenote app object), jotNote (note object for a daily jot), projectNote (note object)
-  // Output: Array of strings, each representing one [date — context] block with project-related content
   // ===============================================================================================
   preprocessDailyJotForProject: async function(app, jotNote, projectNote) {
     const plugin = this;
-
-    // Store results to return later
     let results = [];
 
-    // The jot title is always a human-readable date, e.g., "August 28, 2025"
-    const dateLabel = jotNote.name;
+    const dateLabel = jotNote.name; // e.g. "August 28, 2025"
+    const content = await app.getNoteContent(jotNote);
+    const lines = content.split("\n");
 
-    // Fetch jot content as sections (easier to walk through hierarchy than raw markdown)
-    const sections = await app.getNoteSections({ uuid: jotNote.uuid });
+    let currentHeading = null;  // e.g. "Project Updates" or "Meetings"
+    let stack = [];              // breadcrumb stack for nested bullets
 
-    // Helper: recursively walk through bullets to find references to the project note
-    async function walkBullets(bullets, contextLabel = "") {
-      for (const bullet of bullets) {
-        const text = bullet.text || "";
-        const children = bullet.children || [];
-
-        // Detect if this bullet is a linked note (person, project, meeting, etc.)
-        const linkMatch = text.match(/\(https:\/\/www\.amplenote\.com\/notes\/([a-f0-9-]+)\)/);
-        let noteType = null;
-        let linkedNote = null;
-
-        if (linkMatch) {
-          linkedNote = await app.notes.find(linkMatch[1]);
-          if (linkedNote) {
-            noteType = plugin.getNoteType(linkedNote);
-          }
-        }
-
-        // Update context label if this is a top-level "context" bullet
-        // Example: Person note = "1:1 with Person: Lauri Henry"
-        //          Meeting note = "Meeting: IT Leadership Meeting"
-        //          Project note = "Project: Implement Purview in Box"
-        let currentContext = contextLabel;
-        if (noteType === "people") {
-          currentContext = `1:1 with Person: ${linkedNote.name}`;
-        } else if (noteType === "project") {
-          currentContext = `Project: ${linkedNote.name}`;
-        } else if (noteType === "horizon" || noteType === "software") {
-          currentContext = `${noteType.charAt(0).toUpperCase() + noteType.slice(1)}: ${linkedNote.name}`;
-        } else if (text.toLowerCase().includes("meeting")) {
-          currentContext = `Meeting: ${text.replace(/^\-\s*/, "")}`;
-        }
-
-        // If this bullet references the target project, collect its children as raw content
-        if (linkedNote && linkedNote.uuid === projectNote.uuid) {
-          let rawBullets = children.map(child => "- " + child.text).join("\n");
-          let block = `[${dateLabel} — ${currentContext}]\nProject: ${projectNote.name}\n${rawBullets}`;
-          results.push(block);
-        }
-
-        // Recurse into children (so we can find project references nested under people/meetings)
-        if (children.length > 0) {
-          await walkBullets(children, currentContext);
-        }
-      }
+    // Helper: count indentation (leading spaces before "- ")
+    function getIndent(line) {
+      const match = line.match(/^(\s*)-/);
+      return match ? match[1].length : 0;
     }
 
-    // Iterate through each section of the jot
-    for (const section of sections) {
-      if (section.bullets && section.bullets.length > 0) {
-        await walkBullets(section.bullets);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // -------------------------------------------------------------------------
+      // Step 1: Track headings (we only care about "Project Updates" and "Meetings")
+      // -------------------------------------------------------------------------
+      const headingMatch = line.match(/^#{1,6}\s+(.*)/);
+      if (headingMatch) {
+        const headingText = headingMatch[1].trim();
+        if (headingText === "Project Updates" || headingText === "Meetings") {
+          currentHeading = headingText;
+        } else {
+          currentHeading = null; // ignore other headings
+        }
+        stack = []; // reset breadcrumb at new heading
+        continue;
+      }
+
+      // Skip lines outside relevant headings
+      if (!currentHeading) continue;
+
+      // -------------------------------------------------------------------------
+      // Step 2: Track bullets and maintain breadcrumb stack
+      // -------------------------------------------------------------------------
+      if (/^\s*-\s+/.test(line)) {
+        const indent = getIndent(line);
+        const text = line.trim().slice(2); // strip "- "
+
+        // Pop stack until top has less indentation
+        while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+          stack.pop();
+        }
+
+        // Push this bullet on stack
+        stack.push({ text, indent, raw: line });
+
+        // -----------------------------------------------------------------------
+        // Step 3: Detect if this bullet links to the target project note
+        // -----------------------------------------------------------------------
+        const linkMatch = line.match(/\(https:\/\/www\.amplenote\.com\/notes\/([a-f0-9-]+)\)/);
+        if (linkMatch && linkMatch[1] === projectNote.uuid) {
+          let childLines = [];
+
+          // Capture all indented child bullets
+          for (let j = i + 1; j < lines.length; j++) {
+            const nextLine = lines[j];
+            if (/^\s*-\s+/.test(nextLine)) {
+              const nextIndent = getIndent(nextLine);
+              if (nextIndent > indent) {
+                childLines.push(nextLine.replace(/\s+$/, "")); // keep indentation, strip only trailing spaces
+              } else if (nextIndent <= indent) {
+                break; // stop at same or shallower level
+              }
+            } else if (/^#{1,6}\s+/.test(nextLine)) {
+              break; // stop if another heading
+            }
+          }
+
+          // Build breadcrumb (all parents except the project itself)
+          const breadcrumb = stack
+            .slice(0, -1)
+            .map(b => b.text)
+            .join(" → ");
+
+          let contextLabel = currentHeading;
+          if (breadcrumb) contextLabel += " → " + breadcrumb;
+
+          // Final block with preserved content
+          const block = `[${dateLabel} — ${contextLabel}]\nProject: ${projectNote.name}\n${childLines.join("\n")}`;
+          results.push(block);
+        }
       }
     }
 
