@@ -2169,7 +2169,7 @@
     // Testing new functionality for AI updates
     // ===============================================================================================
     "Test Preprocessor": async function(app, noteUUID) {
-      const result = await plugin.summarizeRecentUpdates(app, projectHandle);
+      const result = await this.summarizeRecentUpdates(app, projectHandle);
       if (result) {
         await app.alert("🧪 Combined Output Ready:\n\n" + result.preprocessedContent);
       }
