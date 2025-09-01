@@ -2169,7 +2169,7 @@
     // Testing new functionality for AI updates
     // ===============================================================================================
     "Test Preprocessor": async function(app, noteUUID) {
-      const currNote = app.findNote(noteUUID);
+      const currNote = await app.findNote(noteUUID);
       const result = await this.summarizeRecentUpdates(app, currNote);
       if (result) {
         await app.alert("🧪 Combined Output Ready:\n\n" + result.preprocessedContent);
