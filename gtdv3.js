@@ -1910,7 +1910,7 @@
   // Called from: future summarization actions (e.g., generateProjectSummary)
   // Depends on: getRecentJotsReferencingProject, preprocessDailyJotForProject
   // ===============================================================================================
-  async function summarizeRecentUpdates(app, projectHandle) {
+  summarizeRecentUpdates: async function(app, projectHandle) {
     const plugin = this;
 
     // Step 1: Get all recent jot noteHandles that backlink to the project
