@@ -1919,7 +1919,6 @@
 
     // Step 2: Preprocess each jot to extract project-relevant excerpts
     let allExcerpts = [];
-
     for (const jotHandle of jotHandles) {
       const excerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, projectHandle);
       if (Array.isArray(excerpts) && excerpts.length > 0) {
@@ -1929,21 +1928,37 @@
 
     // Step 3: Concatenate all excerpts into a single block for summarization
     const preprocessedContent = allExcerpts.join("\n\n");
-
     if (!preprocessedContent) return null; // Still nothing found
 
-    // Step 4: Build prompt for OpenAI
-    const projectName = projectHandle.name; // Used in the user prompt
-    const systemPrompt = `You are a project management assistant. Your job is to read daily updates and create concise summaries of project progress.`;
+    // Step 4: Build the system + user prompts
+    const projectName = projectHandle.name;
 
-    const userPrompt = `Summarize the following recent updates for the project "${projectName}". Group similar topics, focus on meaningful progress, and omit duplicate or trivial information.
+    const systemPrompt = `
+  You are a project management assistant. You summarize project updates based on excerpts from daily jot notes. Each excerpt includes a date, a context (meeting, 1:1, or project update), and raw notes.
 
-  Updates:
+  You must produce a concise, professional summary that:
+
+  - Organizes updates by date (latest first).
+  - Within each date, groups updates by source context (e.g., “From 1:1 with Todd McGregor”, “From IT Leadership Meeting”).
+  - Provides one bullet per context, containing a single concise paragraph.
+  - The paragraph should capture important progress, issues/risks, decisions, actions (with accountable people), and timelines, while preserving all names and responsibilities.
+  - Be brief and readable — avoid overwhelming detail.
+  - Do not merge updates across different days or contexts.
+    `.trim();
+
+    const userPrompt = `
+  Project: ${projectName}
+
+  Daily jot excerpts:
+
   ${preprocessedContent}
 
-  Summary:`;
+  Instructions:
+  - Organize the summary into top-level bullets by date.
+  - Under each date, include one bullet for each source context.
+  - Write one concise paragraph per context. Keep it professional and preserve key details.
+    `.trim();
 
-    // Return both prompts for use in OpenAI API call
     return {
       systemPrompt,
       userPrompt,
@@ -1951,6 +1966,7 @@
       projectName
     };
   }, // end summarizeRecentUpdates
+
 
 // #################################################################################################
 // #################################################################################################
@@ -2165,27 +2181,41 @@
     }, // end Test Two Adds
 */
 
-    // ===============================================================================================
-    // Testing new functionality for AI updates
-    // ===============================================================================================
-    "Test Preprocessor": async function(app, noteUUID) {
-      const currNote = await app.findNote(noteUUID);
-      const result = await this.summarizeRecentUpdates(app, currNote);
+// ===============================================================================================
+// Testing new functionality for AI updates
+// ===============================================================================================
+"Test Preprocessor": async function(app, noteUUID) {
+  const plugin = this;
 
-      if (result) {
-        const { systemPrompt, userPrompt } = result;
+  // 1. Load the current note (assumed to be the project note)
+  const currNote = await app.notes.find(noteUUID);
+  if (!currNote) {
+    await app.alert("❌ Could not find the current note.");
+    return;
+  }
 
-        const fullPrompt = `🔒 SYSTEM PROMPT:
-    ${systemPrompt}
+  // 2. Run the summarizer
+  const result = await plugin.summarizeRecentUpdates(app, currNote);
+  if (!result) {
+    await app.alert("⚠️ No recent updates found for this project.");
+    return;
+  }
 
-    💬 USER PROMPT:
-    ${userPrompt}`;
+  // 3. Build the combined prompt output
+  const combinedPrompt = 
+`Prompt for Project: ${result.projectName}
 
-        await app.alert("🧪 Ready to copy:\n\n" + fullPrompt);
-      } else {
-        await app.alert("⚠️ No recent updates found to summarize.");
-      }
-    }, // end Test Preprocessor
+=== SYSTEM PROMPT ===
+${result.systemPrompt}
+
+=== USER PROMPT ===
+${result.userPrompt}
+`;
+
+  // 4. Show the result in an alert (so you can copy it into ChatGPT for testing)
+  await app.alert(combinedPrompt);
+}, // end Test Preprocessor
+
 
     // ===============================================================================================
     // Collects deadline tasks to display on the daily jot
