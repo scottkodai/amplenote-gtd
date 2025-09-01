@@ -1950,7 +1950,7 @@
       preprocessedContent,
       projectName
     };
-  } // end summarizeRecentUpdates
+  }, // end summarizeRecentUpdates
 
 // #################################################################################################
 // #################################################################################################
@@ -2173,7 +2173,7 @@
       if (result) {
         await app.alert("🧪 Combined Output Ready:\n\n" + result.preprocessedContent);
       }
-    }, // end Test Preprossor
+    }, // end Test Preprocessor
 
     // ===============================================================================================
     // Collects deadline tasks to display on the daily jot
