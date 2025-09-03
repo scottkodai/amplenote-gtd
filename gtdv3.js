@@ -1940,7 +1940,7 @@
 
   - Organizes updates by date (latest first).
   - Within each date, groups updates by source context (e.g., “From 1:1 with Todd McGregor”, “From IT Leadership Meeting”).
-  - Provides one bullet per context, containing a single concise paragraph.
+  - Provides one bullet per context, containing a single concise paragraph. If nothing was noted for that day, do not include that day in your output.
   - The paragraph should capture important progress, issues/risks, decisions, actions (with accountable people), and timelines, while preserving all names and responsibilities.
   - Be brief and readable — avoid overwhelming detail.
   - Do not merge updates across different days or contexts.
@@ -1954,7 +1954,7 @@
   ${preprocessedContent}
 
   Instructions:
-  - Organize the summary into top-level bullets by date.
+  - Organize the summary into top-level bullets by date. Include the context for the information in this top-level bullet.
   - Under each date, include one bullet for each source context.
   - Write one concise paragraph per context. Keep it professional and preserve key details.
     `.trim();
@@ -2181,40 +2181,40 @@
     }, // end Test Two Adds
 */
 
-// ===============================================================================================
-// Testing new functionality for AI updates
-// ===============================================================================================
-"Test Preprocessor": async function(app, noteUUID) {
-  const plugin = this;
+    // ===============================================================================================
+    // Testing new functionality for AI updates
+    // ===============================================================================================
+    "Test Preprocessor": async function(app, noteUUID) {
+      const plugin = this;
 
-  // 1. Load the current note (assumed to be the project note)
-  const currNote = await app.findNote(noteUUID);
-  if (!currNote) {
-    await app.alert("❌ Could not find the current note.");
-    return;
-  }
+      // 1. Load the current note (assumed to be the project note)
+      const currNote = await app.findNote(noteUUID);
+      if (!currNote) {
+        await app.alert("❌ Could not find the current note.");
+        return;
+      }
 
-  // 2. Run the summarizer
-  const result = await plugin.summarizeRecentUpdates(app, currNote);
-  if (!result) {
-    await app.alert("⚠️ No recent updates found for this project.");
-    return;
-  }
+      // 2. Run the summarizer
+      const result = await plugin.summarizeRecentUpdates(app, currNote);
+      if (!result) {
+        await app.alert("⚠️ No recent updates found for this project.");
+        return;
+      }
 
-  // 3. Build the combined prompt output
-  const combinedPrompt = 
-`Prompt for Project: ${result.projectName}
+      // 3. Build the combined prompt output
+      const combinedPrompt = 
+    `Prompt for Project: ${result.projectName}
 
-=== SYSTEM PROMPT ===
-${result.systemPrompt}
+    === SYSTEM PROMPT ===
+    ${result.systemPrompt}
 
-=== USER PROMPT ===
-${result.userPrompt}
-`;
+    === USER PROMPT ===
+    ${result.userPrompt}
+    `;
 
-  // 4. Show the result in an alert (so you can copy it into ChatGPT for testing)
-  await app.alert(combinedPrompt);
-}, // end Test Preprocessor
+      // 4. Show the result in an alert (so you can copy it into ChatGPT for testing)
+      await app.alert(combinedPrompt);
+    }, // end Test Preprocessor
 
 
     // ===============================================================================================
@@ -2238,7 +2238,7 @@ ${result.userPrompt}
         if (!task.deadline) continue;
 
         const daysLeft = plugin.daysUntilDeadline(task.deadline);
-        if (daysLeft <= 7) {
+        if (daysLeft <= 2) {
           const pacificDeadline = plugin.convertDeadlineToPacific(task.deadline);
           const { updatedContent, nextCounter } = plugin.uniquifyFootnotes(task.content, footnoteCounter);
           footnoteCounter = nextCounter;
@@ -2254,7 +2254,7 @@ ${result.userPrompt}
 
       const md = deadlineTasks.length
         ? deadlineTasks.map(t => `- ${t.content}`).join("\n")
-        : "_No deadline tasks in next 7 days_";
+        : "_No deadline tasks in next 2 days_";
 
       await app.replaceNoteContent(
         noteUUID,
