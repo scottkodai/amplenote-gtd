@@ -782,7 +782,7 @@
         // Append each backlink with date + content
         backlinkContents.forEach(content => {
           updates.push({
-            name: jotLink.name,
+            name: jot.name,
             noteURL: jotLink.url,
             markdown: content
           });
