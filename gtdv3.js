@@ -2146,19 +2146,13 @@
       for (const jotHandle of jotHandles) {
         const excerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
         for (const excerpt of excerpts) {
+          // First line = top-level bullet with date, link, and context
           const headerLine = `- [${excerpt.date}](${excerpt.url}) – ${excerpt.context}`;
 
-          // Convert lines to markdown with proper indentation
-          const contentLines = excerpt.lines.map(line => {
-            const match = line.match(/^(\s*)-\s+(.*)$/);
-            const baseIndent = match ? match[1].length : 0;
-            const content = match ? match[2] : line.trim();
-            const prefix = "  ".repeat((baseIndent / 2) + 1);
-            return `${prefix}- ${content}`;
-          });
+          // Use the excerpt's original indented lines
+          const block = [headerLine, ...excerpt.lines].join("\n");
 
-          const block = [headerLine, ...contentLines].join("\n");
-
+          // Uniquify footnotes so multiple jots can safely appear
           const { updatedContent, nextCounter } = plugin.uniquifyFootnotes(block, footnoteCounter);
           footnoteCounter = nextCounter;
 
