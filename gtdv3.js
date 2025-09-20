@@ -1800,16 +1800,15 @@
   // Preserves breadcrumb context (Heading → Parent Bullets → Project) and exact bullet formatting
   // Called from: 
   // ===============================================================================================
-  preprocessDailyJotForProject: async function(app, jotSelection, projectHandle) {
+  preprocessDailyJotForProject: async function(app, jotHandle, projectHandle) {
     const plugin = this;
     const results = [];
 
-    const dateLabel = jotSelection.name;
-    const content = await app.getNoteContent(jotSelection);
+    const dateLabel = jotHandle.name;
+    const content = await app.getNoteContent(jotHandle);
     const lines = content.split("\n");
 
     const projectUUID = projectHandle.uuid;
-    const projectName = projectHandle.name;
 
     let currentHeading = null;
     let stack = [];
@@ -1822,7 +1821,7 @@
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // -- Step 1: Track headings
+      // Step 1: Track top-level headings
       const headingMatch = line.match(/^#{1,6}\s+(.*)/);
       if (headingMatch) {
         const headingText = headingMatch[1].trim();
@@ -1837,20 +1836,22 @@
 
       if (!currentHeading) continue;
 
-      // -- Step 2: Track bullets and breadcrumbs
+      // Step 2: Track bullets & breadcrumb trail
       if (/^\s*-\s+/.test(line)) {
         const indent = getIndent(line);
-        const text = line.trim().slice(2);
+        const text = line.trim().slice(2);  // remove "- " from start
 
+        // Update breadcrumb stack
         while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
           stack.pop();
         }
 
         stack.push({ text, indent, raw: line });
 
-        // -- Step 3: Match link to target project
+        // Step 3: Check for project link
         const linkMatch = line.match(/\(https:\/\/www\.amplenote\.com\/notes\/([a-f0-9-]+)\)/);
         if (linkMatch && linkMatch[1] === projectUUID) {
+          // Capture child bullets (indented beneath this one)
           let childLines = [];
 
           for (let j = i + 1; j < lines.length; j++) {
@@ -1858,7 +1859,7 @@
             if (/^\s*-\s+/.test(nextLine)) {
               const nextIndent = getIndent(nextLine);
               if (nextIndent > indent) {
-                childLines.push(nextLine.replace(/\s+$/, ""));
+                childLines.push(nextLine.trim());
               } else if (nextIndent <= indent) {
                 break;
               }
@@ -1871,8 +1872,12 @@
           let contextLabel = currentHeading;
           if (breadcrumb) contextLabel += " → " + breadcrumb;
 
-          const block = `[${dateLabel} — ${contextLabel}]\nProject: ${projectName}\n${childLines.join("\n")}`;
-          results.push(block);
+          // Store the result as a structured object
+          results.push({
+            jotHandle,
+            contextLabel,
+            bullets: childLines.length ? childLines : [line.trim()]
+          });
         }
       }
     }
@@ -2132,7 +2137,6 @@
     "Copy Recent Updates": async function(app, noteUUID) {
       const plugin = this;
       const noteHandle = await app.findNote(noteUUID);
-      const projectName = noteHandle.name;
 
       // Step 1: Get recent jot backlinks to this project
       const jotHandles = await plugin.getRecentJotsReferencingProject(app, noteHandle);
@@ -2141,39 +2145,40 @@
         return;
       }
 
-      // Step 2: Format each jot backlink + bullets as nested markdown
+      // Step 2: Normalize note links + collect all update blocks
       const normalize = plugin.normalizeNoteHandle;
       let combinedMarkdown = "";
 
       for (const jotHandle of jotHandles) {
-        const excerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
-        if (!Array.isArray(excerpts) || excerpts.length === 0) continue;
+        const updateBlocks = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
+        if (!Array.isArray(updateBlocks) || updateBlocks.length === 0) continue;
 
-        const handle = normalize(jotHandle);
-        const topBullet = `- [${handle.name}](${handle.url})`;
+        for (const block of updateBlocks) {
+          const { jotHandle, contextLabel, bullets } = block;
 
-        const subBullets = excerpts
-          .map(e => e.trim())
-          .filter(e => e.length > 0)
-          .map(e => `  - ${e}`)
-          .join("\n");
+          const jot = normalize(jotHandle);
+          const titleLine = `- [${jot.name}](${jot.url}) – ${contextLabel}`;
 
-        combinedMarkdown += `${topBullet}\n${subBullets}\n\n`;
+          const subBullets = bullets
+            .map(line => `  - ${line.trim().replace(/^\- /, "")}`) // remove existing dash if present
+            .join("\n");
+
+          combinedMarkdown += `${titleLine}\n${subBullets}\n\n`;
+        }
       }
 
       if (!combinedMarkdown.trim()) {
-        await app.alert("⚠️ No matching bullets found in daily jots.");
+        await app.alert("⚠️ No matching updates found in daily jots.");
         return;
       }
 
-      // Step 3: Replace the content under the '## Recent Updates' header
+      // Step 3: Replace the 'Recent Updates' section in the project note
       await app.replaceNoteContent(noteUUID, combinedMarkdown.trim(), {
         section: { heading: { text: "Recent Updates" } }
       });
 
       await app.alert("✅ Recent Updates inserted.");
     }, // end Copy Recent Updates
-
 
     // ===============================================================================================
     // Collects deadline tasks to display on the daily jot
