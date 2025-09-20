@@ -776,14 +776,14 @@
         const sourceNoteHandle = jot;
         const backlinkContents = await app.getNoteBacklinkContents(targetNoteHandle, sourceNoteHandle);
 
-        // Get jot name for label
-        const dateLabel = jot.name;
+        // Normalize the Jot name and url
+        const jotLink = this.normalizeNoteHandle(jot);
 
         // Append each backlink with date + content
         backlinkContents.forEach(content => {
           updates.push({
-            date: dateLabel,
-            noteURL: jot.url,
+            name: jotLink.name,
+            noteURL: jotLink.url,
             markdown: content
           });
         });
