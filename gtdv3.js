@@ -2161,10 +2161,10 @@
 
           const subBullets = bullets
             .map(line => {
-              const match = line.match(/^(\s*)-\s+/);         // match leading indent
-              const indent = match ? match[1] : "";           // preserve it
-              const text = line.replace(/^(\s*)-\s+/, "");     // remove dash only
-              return `${indent}- ${text}`;                    // reinsert dash with same indent
+              const match = line.match(/^(\s*)-\s+/);
+              const indent = match ? match[1] : "";
+              const text = line.replace(/^(\s*)-\s+/, "");
+              return `${indent}- ${text}`;
             })
             .join("\n");
 
@@ -2178,10 +2178,10 @@
       }
 
       // Step 3: Fix footnotes before inserting
-      const markdownWithFootnotes = await plugin.uniquifyFootnotes(combinedMarkdown.trim(), noteUUID);
+      const { updatedContent } = plugin.uniquifyFootnotes(combinedMarkdown.trim(), 1);
 
-      // Step 4: Replace the content under the 'Recent Updates' section in the project note
-      await app.replaceNoteContent(noteUUID, markdownWithFootnotes, {
+      // Step 4: Replace the content under the 'Recent Updates' header in the project note
+      await app.replaceNoteContent(noteUUID, updatedContent, {
         section: { heading: { text: "Recent Updates" } }
       });
 
