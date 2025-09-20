@@ -733,6 +733,11 @@
   updateRecentUpdatesSection: async function(app, noteUUID, domaintTags = []) {
     const sectionHeading = "Recent Updates";
 
+    // Utility to remove ordinal suffixes from day numbers in Jot names
+    function cleanDateString(dateStr) {
+      return dateStr.replace(/(\d+)(st|nd|rd|th)/, "$1");
+    };
+
     // 1. Find the section (don't add if it doesn't exist)
     const sections = await app.getNoteSections({ uuid: noteUUID });
     const targetSection = sections.find(s =>
@@ -746,16 +751,22 @@
     // 2. Filter to only those tagged with 'daily-jots'
     const jots = backlinks.filter(n => n.tags.includes("daily-jots"));
 
-    // 3. Limit to those updated in the last 14 days
+    // 3. Limit to jots from the last 14 days
     const lookBackDate = new Date();
     lookBackDate.setDate(lookBackDate.getDate() - 14);
 
-    const recentJots = jots.filter(n => {
-      const updatedAt = new Date(n.updated); // ISO 8601 format
-      return updatedAt >= lookBackDate;
-    });
+    // 4. Need to filter jots for those with titles greater than 14 daya ago
+    const recentJots = jots
+      .map(jot => {
+        const cleaned = cleanDateString(jot.name);
+        const parsedDate = new Date(cleaned);
+        return { jot, parsedDate };
+      })
+      .filter(({ parsedDate }) => !isNaN(parsedDate) && parsedDate >= lookBackDate)
+      .sort((a, b) => b.parsedDate - a.parsedDate) // most recent first
+      .map(({ jot }) => jot); // unwrap original jot object
 
-    // 4. Iterate through recentJots and pull out context and contents
+    // 5. Iterate through recentJots and pull out context and contents
     await app.alert(JSON.stringify(recentJots));
 
   }, //end updateRecentUpdatesSection
