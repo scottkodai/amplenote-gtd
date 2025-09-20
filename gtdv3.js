@@ -2131,7 +2131,7 @@
     // ===============================================================================================
     "Copy Recent Updates": async function(app, noteUUID) {
     const plugin = this;
-      const noteHandle = await app.notes.find(noteUUID);
+      const noteHandle = await app.findNote(noteUUID);
       const projectName = noteHandle.name;
 
       // Step 1: Get recent jot backlinks to this project
