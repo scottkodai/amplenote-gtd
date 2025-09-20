@@ -2159,10 +2159,8 @@
       const combinedMarkdown = allExcerpts.join("\n\n");
 
       // Step 4: Replace the content under the '## Recent Updates' header in the project note
-      await app.replaceNoteSection({
-        uuid: noteUUID,
-        sectionTitle: "Recent Updates",
-        newContent: combinedMarkdown
+      await app.replaceNoteContent(noteUUID, combinedMarkdown, {
+        section: { heading: { text: "Recent Updates" } }
       });
 
       await app.alert("✅ Recent Updates inserted.");
