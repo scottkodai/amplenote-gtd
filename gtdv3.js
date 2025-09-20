@@ -2137,6 +2137,7 @@
     "Copy Recent Updates": async function(app, noteUUID) {
       const plugin = this;
       const noteHandle = await app.findNote(noteUUID);
+      const projectName = noteHandle.name;
 
       // Step 1: Get recent jot backlinks to this project
       const jotHandles = await plugin.getRecentJotsReferencingProject(app, noteHandle);
@@ -2145,85 +2146,58 @@
         return;
       }
 
-      const normalize = plugin.normalizeNoteHandle;
-      let combinedMarkdown = "";
-      const allFootnotes = [];
+      // Step 2: Collect raw excerpts from each jot
+      let allBlocks = [];
 
       for (const jotHandle of jotHandles) {
-        const updateBlocks = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
-        if (!Array.isArray(updateBlocks) || updateBlocks.length === 0) continue;
+        const rawExcerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
+        if (!Array.isArray(rawExcerpts) || rawExcerpts.length === 0) continue;
 
-        // Track which footnote labels are referenced in this jot
-        const referencedLabels = new Set();
+        // Convert each block of content into properly indented markdown
+        for (const excerpt of rawExcerpts) {
+          const lines = excerpt.split("\n");
 
-        for (const block of updateBlocks) {
-          const { jotHandle, contextLabel, bullets } = block;
-          const jot = normalize(jotHandle);
-          const titleLine = `- [${jot.name}](${jot.url}) – ${contextLabel}`;
-
-          // Capture all referenced footnote labels
-          for (const line of bullets) {
-            const matches = [...line.matchAll(/\[\^([^\]\s]+?)\]/g)];
-            for (const match of matches) {
-              referencedLabels.add(match[1]);
-            }
+          // First line is the heading
+          const [headerLine, ...contentLines] = lines;
+          const headerMatch = headerLine.match(/^\[(.+?)\]\((https:\/\/www\.amplenote\.com\/notes\/[a-f0-9-]+)\)\s*[-–]\s*(.+)$/);
+          let context = "";
+          let dateText = "";
+          let dateLink = "";
+          if (headerMatch) {
+            dateText = headerMatch[1];
+            dateLink = headerMatch[2];
+            context = headerMatch[3];
+          } else {
+            continue; // Skip malformed block
           }
 
-          // Nest all bullet lines under the title line (indent by 2 spaces)
-          const subBullets = bullets.map(line => `  ${line}`).join("\n");
+          // Top-level bullet with link and context
+          const header = `- [${dateText}](${dateLink}) – ${context}`;
 
-          combinedMarkdown += `${titleLine}\n${subBullets}\n\n`;
-        }
+          // Re-indent all content lines based on their leading space
+          const indentedLines = contentLines.map(line => {
+            const match = line.match(/^(\s*)[-*]\s+(.*)$/);
+            const indentLevel = match ? match[1].length : 0;
+            const content = match ? match[2] : line.trim();
+            const prefix = "  ".repeat(indentLevel + 1); // +1 ensures all are nested at least one level
+            return `${prefix}- ${content}`;
+          });
 
-        // Step 2: Safely extract full footnote definitions
-        if (referencedLabels.size > 0) {
-          const content = await app.getNoteContent(jotHandle);
-          const lines = content.split("\n");
-
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            const match = line.match(/^\[\^([^\]\s]+?)\]:\s*(.*)$/);
-            if (match && referencedLabels.has(match[1])) {
-              const label = match[1];
-              let defLines = [line];
-
-              // Collect all lines until we hit another footnote or heading
-              i++;
-              while (i < lines.length) {
-                const nextLine = lines[i];
-
-                if (
-                  /^\[\^([^\]\s]+?)\]:/.test(nextLine) ||  // next footnote
-                  /^#{1,6}\s/.test(nextLine)               // next heading
-                ) {
-                  i--; // rewind so outer loop resumes at correct place
-                  break;
-                }
-
-                defLines.push(nextLine);
-                i++;
-              }
-
-              allFootnotes.push(defLines.join("\n"));
-            }
-          }
+          const block = [header, ...indentedLines].join("\n");
+          allBlocks.push(block);
         }
       }
 
-      if (!combinedMarkdown.trim()) {
-        await app.alert("⚠️ No matching updates found in daily jots.");
+      if (allBlocks.length === 0) {
+        await app.alert("⚠️ No matching bullets found in daily jots.");
         return;
       }
 
-      // Step 3: Append all captured footnotes
-      if (allFootnotes.length) {
-        combinedMarkdown += "\n\n" + allFootnotes.join("\n");
-      }
-
-      // Step 4: Uniquify all footnotes
+      // Step 3: Merge all and uniquify footnotes
+      const combinedMarkdown = allBlocks.join("\n\n");
       const { updatedContent } = plugin.uniquifyFootnotes(combinedMarkdown.trim(), 1);
 
-      // Step 5: Replace the 'Recent Updates' section in the project note
+      // Step 4: Replace the 'Recent Updates' section in the project note
       await app.replaceNoteContent(noteUUID, updatedContent, {
         section: { heading: { text: "Recent Updates" } }
       });
