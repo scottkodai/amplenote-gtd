@@ -766,8 +766,33 @@
       .sort((a, b) => b.parsedDate - a.parsedDate) // most recent first
       .map(({ jot }) => jot); // unwrap original jot object
 
+    // await app.alert(JSON.stringify(recentJots));
+
     // 5. Iterate through recentJots and pull out context and contents
-    await app.alert(JSON.stringify(recentJots));
+    const targetNoteHandle = { uuid: noteUUID };
+
+      const updates = [];
+      for (const jot of recentJots) {
+        const sourceNoteHandle = jot;
+        const backlinkContents = await app.getNoteBacklinkContents(targetNoteHandle, sourceNoteHandle);
+
+        // Get jot name for label
+        const dateLabel = jot.name;
+
+        // Append each backlink with date + content
+        backlinkContents.forEach(content => {
+          updates.push({
+            date: dateLabel,
+            noteURL: jot.url,
+            markdown: content
+          });
+        });
+      }
+
+      // Debug output for now
+      await app.alert(updates.map(u =>
+        `- [${u.date}](${u.noteURL})\n${u.markdown}`
+      ).join("\n\n"));
 
   }, //end updateRecentUpdatesSection
 
