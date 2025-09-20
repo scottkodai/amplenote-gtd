@@ -2145,7 +2145,7 @@
         return;
       }
 
-      // Step 2: Normalize note links + collect all update blocks
+      // Step 2: Normalize links and collect formatted update blocks
       const normalize = plugin.normalizeNoteHandle;
       let combinedMarkdown = "";
 
@@ -2160,7 +2160,12 @@
           const titleLine = `- [${jot.name}](${jot.url}) – ${contextLabel}`;
 
           const subBullets = bullets
-            .map(line => `  - ${line.trim().replace(/^\- /, "")}`) // remove existing dash if present
+            .map(line => {
+              const match = line.match(/^(\s*)-\s+/);         // match leading indent
+              const indent = match ? match[1] : "";           // preserve it
+              const text = line.replace(/^(\s*)-\s+/, "");     // remove dash only
+              return `${indent}- ${text}`;                    // reinsert dash with same indent
+            })
             .join("\n");
 
           combinedMarkdown += `${titleLine}\n${subBullets}\n\n`;
@@ -2172,8 +2177,11 @@
         return;
       }
 
-      // Step 3: Replace the 'Recent Updates' section in the project note
-      await app.replaceNoteContent(noteUUID, combinedMarkdown.trim(), {
+      // Step 3: Fix footnotes before inserting
+      const markdownWithFootnotes = await plugin.uniquifyFootnotes(combinedMarkdown.trim(), noteUUID);
+
+      // Step 4: Replace the content under the 'Recent Updates' section in the project note
+      await app.replaceNoteContent(noteUUID, markdownWithFootnotes, {
         section: { heading: { text: "Recent Updates" } }
       });
 
