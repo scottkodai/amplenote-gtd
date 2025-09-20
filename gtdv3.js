@@ -2184,14 +2184,27 @@
             const line = lines[i];
             const match = line.match(/^\[\^([^\]\s]+?)\]:\s*(.*)$/);
             if (match && referencedLabels.has(match[1])) {
-              let def = [line]; // Start with the initial line
-              i++; // move to possible indented lines
-              while (i < lines.length && (/^\s{2,}|\t/).test(lines[i])) {
-                def.push(lines[i]);
+              const label = match[1];
+              let defLines = [line];
+
+              // Collect all lines until we hit another footnote or heading
+              i++;
+              while (i < lines.length) {
+                const nextLine = lines[i];
+
+                if (
+                  /^\[\^([^\]\s]+?)\]:/.test(nextLine) ||  // next footnote
+                  /^#{1,6}\s/.test(nextLine)               // next heading
+                ) {
+                  i--; // rewind so outer loop resumes at correct place
+                  break;
+                }
+
+                defLines.push(nextLine);
                 i++;
               }
-              i--; // rewind for main loop
-              allFootnotes.push(def.join("\n"));
+
+              allFootnotes.push(defLines.join("\n"));
             }
           }
         }
@@ -2202,7 +2215,7 @@
         return;
       }
 
-      // Step 3: Append footnote definitions
+      // Step 3: Append all captured footnotes
       if (allFootnotes.length) {
         combinedMarkdown += "\n\n" + allFootnotes.join("\n");
       }
