@@ -782,7 +782,7 @@
         // Append each backlink with date + content
         backlinkContents.forEach(content => {
           updates.push({
-            name: sourceNoteHandle.name,
+            name: jotLink.name,
             noteURL: jotLink.url,
             markdown: content
           });
@@ -791,7 +791,7 @@
 
       // Debug output for now
       await app.alert(updates.map(u =>
-        `- [${u.date}](${u.noteURL})\n${u.markdown}`
+        `- [${u.name}](${u.noteURL})\n${u.markdown}`
       ).join("\n\n"));
 
   }, //end updateRecentUpdatesSection
