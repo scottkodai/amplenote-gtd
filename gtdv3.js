@@ -2175,14 +2175,18 @@
           combinedMarkdown += `${titleLine}\n${subBullets}\n\n`;
         }
 
-        // Now fetch the full content of the jot and extract only relevant definitions
+        // Step 2: Append only relevant multiline footnotes
         if (referencedLabels.size > 0) {
           const content = await app.getNoteContent(jotHandle);
-          const allDefs = [...content.matchAll(/^\[\^([^\]\s]+?)\]: (.+)$/gm)];
 
-          for (const [_, label, def] of allDefs) {
+          // Multiline footnote extraction
+          const allDefs = [...content.matchAll(/^\[\^([^\]\s]+?)\]:\s([\s\S]*?)(?=\n\S|\n$)/gm)];
+
+          for (const match of allDefs) {
+            const label = match[1];
+            const body = match[2];
             if (referencedLabels.has(label)) {
-              allFootnotes.push(`[^${label}]: ${def}`);
+              allFootnotes.push(`[^${label}]:${body}`);
             }
           }
         }
@@ -2193,15 +2197,15 @@
         return;
       }
 
-      // Step 2: Append footnotes before uniquifying
+      // Step 3: Append all captured footnotes
       if (allFootnotes.length) {
         combinedMarkdown += "\n\n" + allFootnotes.join("\n");
       }
 
-      // Step 3: Uniquify all footnotes
+      // Step 4: Uniquify all footnotes before inserting
       const { updatedContent } = plugin.uniquifyFootnotes(combinedMarkdown.trim(), 1);
 
-      // Step 4: Replace the 'Recent Updates' section in the project note
+      // Step 5: Replace the 'Recent Updates' section in the project note
       await app.replaceNoteContent(noteUUID, updatedContent, {
         section: { heading: { text: "Recent Updates" } }
       });
