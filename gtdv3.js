@@ -2134,35 +2134,93 @@
       const plugin = this;
       const noteHandle = await app.findNote(noteUUID);
 
+      // Step 1: Get recent jot backlinks to this project
       const jotHandles = await plugin.getRecentJotsReferencingProject(app, noteHandle);
       if (jotHandles.length === 0) {
         await app.alert("⚠️ No recent updates found.");
         return;
       }
 
-      let allMarkdown = [];
-      let footnoteCounter = 1;
+      const normalize = plugin.normalizeNoteHandle;
+      let combinedMarkdown = "";
+      const allFootnotes = [];
 
       for (const jotHandle of jotHandles) {
-        const excerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
-        for (const excerpt of excerpts) {
-          // First line = top-level bullet with date, link, and context
-          const headerLine = `- [${excerpt.date}](${excerpt.url}) – ${excerpt.context}`;
+        const updateBlocks = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
+        if (!Array.isArray(updateBlocks) || updateBlocks.length === 0) continue;
 
-          // Use the excerpt's original indented lines
-          const block = [headerLine, ...excerpt.lines].join("\n");
+        // Track which footnote labels are referenced in this jot
+        const referencedLabels = new Set();
 
-          // Uniquify footnotes so multiple jots can safely appear
-          const { updatedContent, nextCounter } = plugin.uniquifyFootnotes(block, footnoteCounter);
-          footnoteCounter = nextCounter;
+        for (const block of updateBlocks) {
+          const { jotHandle, contextLabel, bullets } = block;
+          const jot = normalize(jotHandle);
+          const titleLine = `- [${jot.name}](${jot.url}) – ${contextLabel}`;
 
-          allMarkdown.push(updatedContent);
+          // Capture all referenced footnote labels
+          for (const line of bullets) {
+            const matches = [...line.matchAll(/\[\^([^\]\s]+?)\]/g)];
+            for (const match of matches) {
+              referencedLabels.add(match[1]);
+            }
+          }
+
+          // Nest all bullet lines under the title line (indent by 2 spaces)
+          const subBullets = bullets.map(line => `  ${line}`).join("\n");
+
+          combinedMarkdown += `${titleLine}\n${subBullets}\n\n`;
+        }
+
+        // Step 2: Safely extract full footnote definitions
+        if (referencedLabels.size > 0) {
+          const content = await app.getNoteContent(jotHandle);
+          const lines = content.split("\n");
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const match = line.match(/^\[\^([^\]\s]+?)\]:\s*(.*)$/);
+            if (match && referencedLabels.has(match[1])) {
+              const label = match[1];
+              let defLines = [line];
+
+              // Collect all lines until we hit another footnote or heading
+              i++;
+              while (i < lines.length) {
+                const nextLine = lines[i];
+
+                if (
+                  /^\[\^([^\]\s]+?)\]:/.test(nextLine) ||  // next footnote
+                  /^#{1,6}\s/.test(nextLine)               // next heading
+                ) {
+                  i--; // rewind so outer loop resumes at correct place
+                  break;
+                }
+
+                defLines.push(nextLine);
+                i++;
+              }
+
+              allFootnotes.push(defLines.join("\n"));
+            }
+          }
         }
       }
 
-      const finalMarkdown = allMarkdown.join("\n\n");
+      if (!combinedMarkdown.trim()) {
+        await app.alert("⚠️ No matching updates found in daily jots.");
+        return;
+      }
 
-      await app.replaceNoteContent(noteUUID, finalMarkdown, {
+      // Step 3: Append all captured footnotes
+      if (allFootnotes.length) {
+        combinedMarkdown += "\n\n" + allFootnotes.join("\n");
+      }
+
+      // Step 4: Uniquify all footnotes
+      const { updatedContent } = plugin.uniquifyFootnotes(combinedMarkdown.trim(), 1);
+
+      // Step 5: Replace the 'Recent Updates' section in the project note
+      await app.replaceNoteContent(noteUUID, updatedContent, {
         section: { heading: { text: "Recent Updates" } }
       });
 
