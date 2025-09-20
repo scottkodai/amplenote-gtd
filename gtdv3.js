@@ -2130,7 +2130,7 @@
     // Copy recent updates from Daily Jots
     // ===============================================================================================
     "Copy Recent Updates": async function(app, noteUUID) {
-    const plugin = this;
+      const plugin = this;
       const noteHandle = await app.findNote(noteUUID);
       const projectName = noteHandle.name;
 
@@ -2141,25 +2141,33 @@
         return;
       }
 
-      // Step 2: Collect raw excerpts from each jot
-      let allExcerpts = [];
+      // Step 2: Format each jot backlink + bullets as nested markdown
+      const normalize = plugin.normalizeNoteHandle;
+      let combinedMarkdown = "";
+
       for (const jotHandle of jotHandles) {
         const excerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
-        if (Array.isArray(excerpts) && excerpts.length > 0) {
-          allExcerpts.push(...excerpts.map(e => e.trim()));
-        }
+        if (!Array.isArray(excerpts) || excerpts.length === 0) continue;
+
+        const handle = normalize(jotHandle);
+        const topBullet = `- [${handle.name}](${handle.url})`;
+
+        const subBullets = excerpts
+          .map(e => e.trim())
+          .filter(e => e.length > 0)
+          .map(e => `  - ${e}`)
+          .join("\n");
+
+        combinedMarkdown += `${topBullet}\n${subBullets}\n\n`;
       }
 
-      if (allExcerpts.length === 0) {
+      if (!combinedMarkdown.trim()) {
         await app.alert("⚠️ No matching bullets found in daily jots.");
         return;
       }
 
-      // Step 3: Format the combined output
-      const combinedMarkdown = allExcerpts.join("\n\n");
-
-      // Step 4: Replace the content under the '## Recent Updates' header in the project note
-      await app.replaceNoteContent(noteUUID, combinedMarkdown, {
+      // Step 3: Replace the content under the '## Recent Updates' header
+      await app.replaceNoteContent(noteUUID, combinedMarkdown.trim(), {
         section: { heading: { text: "Recent Updates" } }
       });
 
