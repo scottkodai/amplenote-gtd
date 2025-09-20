@@ -2161,7 +2161,7 @@
           const jot = normalize(jotHandle);
           const titleLine = `- [${jot.name}](${jot.url}) – ${contextLabel}`;
 
-          // Scan for referenced footnote labels
+          // Capture all referenced footnote labels
           for (const line of bullets) {
             const matches = [...line.matchAll(/\[\^([^\]\s]+?)\]/g)];
             for (const match of matches) {
@@ -2169,24 +2169,29 @@
             }
           }
 
-          // Preserve indentation and formatting
-          const subBullets = bullets.map(line => line).join("\n");
+          // Nest all bullet lines under the title line (indent by 2 spaces)
+          const subBullets = bullets.map(line => `  ${line}`).join("\n");
 
           combinedMarkdown += `${titleLine}\n${subBullets}\n\n`;
         }
 
-        // Step 2: Append only relevant multiline footnotes
+        // Step 2: Safely extract full footnote definitions
         if (referencedLabels.size > 0) {
           const content = await app.getNoteContent(jotHandle);
+          const lines = content.split("\n");
 
-          // Multiline footnote extraction
-          const allDefs = [...content.matchAll(/^\[\^([^\]\s]+?)\]:\s([\s\S]*?)(?=\n\S|\n$)/gm)];
-
-          for (const match of allDefs) {
-            const label = match[1];
-            const body = match[2];
-            if (referencedLabels.has(label)) {
-              allFootnotes.push(`[^${label}]:${body}`);
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const match = line.match(/^\[\^([^\]\s]+?)\]:\s*(.*)$/);
+            if (match && referencedLabels.has(match[1])) {
+              let def = [line]; // Start with the initial line
+              i++; // move to possible indented lines
+              while (i < lines.length && (/^\s{2,}|\t/).test(lines[i])) {
+                def.push(lines[i]);
+                i++;
+              }
+              i--; // rewind for main loop
+              allFootnotes.push(def.join("\n"));
             }
           }
         }
@@ -2197,12 +2202,12 @@
         return;
       }
 
-      // Step 3: Append all captured footnotes
+      // Step 3: Append footnote definitions
       if (allFootnotes.length) {
         combinedMarkdown += "\n\n" + allFootnotes.join("\n");
       }
 
-      // Step 4: Uniquify all footnotes before inserting
+      // Step 4: Uniquify all footnotes
       const { updatedContent } = plugin.uniquifyFootnotes(combinedMarkdown.trim(), 1);
 
       // Step 5: Replace the 'Recent Updates' section in the project note
