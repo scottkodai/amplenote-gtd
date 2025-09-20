@@ -702,6 +702,7 @@
   // ===============================================================================================
   updateAllRelatedSections: async function (app, noteUUID, domainTags = []) {
     const staticSections = [
+      //{ name: "Recent Updates", fn: this.updateRecentUpdatesSection },
       { name: "Related Tasks", fn: this.updateRelatedTasksSection },
       { name: "Related Projects", fn: this.updateRelatedProjectsSection },
       { name: "Related People", fn: this.updateRelatedPeopleSection },
@@ -724,6 +725,40 @@
 
     return { updatedSections: totalUpdated, totalItems: totalCount };
   }, //end updateAllRelatedSections
+
+  // ===============================================================================================
+  // Updates any existing Recent Updates section with backlinks from recent Daily Jots
+  // Called from: 
+  // ===============================================================================================
+  updateRecentUpdatesSection: async function(app, noteUUID, domaintTags = []) {
+    const sectionHeading = "Recent Updates";
+
+    // 1. Find the section (don't add if it doesn't exist)
+    const sections = await app.getNoteSections({ uuid: noteUUID });
+    const targetSection = sections.find(s =>
+      s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+    );
+    if (!targetSection) return { updated: false, count: 0 };
+
+    // 1. Get all noteHandles that reference this project note
+    const backlinks = await app.getNoteBacklinks({uuid: noteUUID});
+
+    // 2. Filter to only those tagged with 'daily-jots'
+    const jots = backlinks.filter(n => n.tags.includes("daily-jots"));
+
+    // 3. Limit to those updated in the last 14 days
+    const lookBackDate = new Date();
+    lookBackDate.setDate(lookBackDate.getDate() - 14);
+
+    const recentJots = jots.filter(n => {
+      const updatedAt = new Date(n.updated); // ISO 8601 format
+      return updatedAt >= lookBackDate;
+    });
+
+    // 4. Iterate through recentJots and pull out context and contents
+    await app.alert(JSON.stringify(recentJots));
+
+  }, //end updateRecentUpdatesSection
 
   // ===============================================================================================
   // Updates any existing Related Tasks section with links to all related tasks
@@ -2011,6 +2046,18 @@
     }, // end Test Two Adds
 */
 
+    // ===============================================================================================
+    // Testing Recent Updates function
+    // ===============================================================================================
+    "Test Recent Updates": async function(app, noteUUID) {
+      const note = await app.notes.find(noteUUID);
+
+      // Detect any domain tags (d/work, d/home, etc.)
+      const domainTags = note.tags.filter(t => t.startsWith("d/"));
+      
+      await this.updateRecentUpdatesSection(app, noteUUID, domainTags);
+
+    }, // end Test Recent Updates
     // ===============================================================================================
     // Collects deadline tasks to display on the daily jot
     // ===============================================================================================
