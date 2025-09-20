@@ -1798,7 +1798,7 @@
   // ===============================================================================================
   // Pre-process a daily jot note into structured excerpts for project summarization
   // Preserves breadcrumb context (Heading → Parent Bullets → Project) and exact bullet formatting
-  // Called from: summarizeRecentUpdates (before building the OpenAI prompt)
+  // Called from: 
   // ===============================================================================================
   preprocessDailyJotForProject: async function(app, jotSelection, projectHandle) {
     const plugin = this;
@@ -1882,7 +1882,7 @@
 
   // ===============================================================================================
   // Returns recent daily jots that reference the given project note
-  // Called from: summarizeRecentUpdates (replaces manual jot selection)
+  // Called from: 
   // ===============================================================================================
   getRecentJotsReferencingProject: async function(app, projectHandle) {
     const plugin = this;
@@ -1905,70 +1905,63 @@
     return recent; // array of noteHandles
   }, // end getRecentJotsReferencingProject
 
-  // ===============================================================================================
-  // Summarizes recent updates for a given project
-  // Called from: future summarization actions (e.g., generateProjectSummary)
-  // Depends on: getRecentJotsReferencingProject, preprocessDailyJotForProject
-  // ===============================================================================================
-  summarizeRecentUpdates: async function(app, projectHandle) {
-    const plugin = this;
-
-    // Step 1: Get all recent jot noteHandles that backlink to the project
-    const jotHandles = await plugin.getRecentJotsReferencingProject(app, projectHandle);
-    if (jotHandles.length === 0) return null; // Nothing to summarize
-
-    // Step 2: Preprocess each jot to extract project-relevant excerpts
-    let allExcerpts = [];
-    for (const jotHandle of jotHandles) {
-      const excerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, projectHandle);
-      if (Array.isArray(excerpts) && excerpts.length > 0) {
-        allExcerpts.push(...excerpts.map(e => e.trim()));
-      }
-    }
-
-    // Step 3: Concatenate all excerpts into a single block for summarization
-    const preprocessedContent = allExcerpts.join("\n\n");
-    if (!preprocessedContent) return null; // Still nothing found
-
-    // Step 4: Build the system + user prompts
-    const projectName = projectHandle.name;
-
-    const systemPrompt = `
-  You are a project management assistant. You summarize project updates based on excerpts from daily jot notes. Each excerpt includes a date, a context (meeting, 1:1, or project update), and raw notes.
-
-  You must produce a concise, professional summary that:
-
-  - Organizes updates by date (latest first).
-  - Within each date, groups updates by source context (e.g., “From 1:1 with Todd McGregor”, “From IT Leadership Meeting”).
-  - Provides one bullet per context, containing a single concise paragraph. If nothing was noted for that day, do not include that day in your output.
-  - The paragraph should capture important progress, issues/risks, decisions, actions (with accountable people), and timelines, while preserving all names and responsibilities.
-  - Be brief and readable — avoid overwhelming detail.
-  - Do not merge updates across different days or contexts.
-    `.trim();
-
-    const userPrompt = `
-  Project: ${projectName}
-
-  Daily jot excerpts:
-
-  ${preprocessedContent}
-
-  Instructions:
-  - Organize the summary into top-level bullets by date. Include the context for the information in this top-level bullet.
-  - Under each date, include one bullet for each source context.
-  - Write one concise paragraph per context. Keep it professional and preserve key details.
-    `.trim();
-
-    return {
-      systemPrompt,
-      userPrompt,
-      preprocessedContent,
-      projectName
-    };
-  }, // end summarizeRecentUpdates
-
-
 // #################################################################################################
+// #################################################################################################
+//                                          App Actions
+// #################################################################################################
+// #################################################################################################
+
+  appOption: {
+
+    // =============================================================================================
+    // Update All Lists
+    // This function is the orchestrator for updating all list notes in whatever ways are 
+    // appropriate
+    // =============================================================================================
+
+    "Update All Lists": async function (app) {
+      const plugin = this;
+
+      // 1. Get all list/* notes
+      const listNotes = await plugin.getFilteredNotes(app, "list");
+
+      let totalNotes = 0;
+      let totalSections = 0;
+      let totalItems = 0;
+
+      // 2. Update each list note using existing logic
+      for (const note of listNotes) {
+        const domainTags = note.tags.filter(t => t.startsWith("d/"));
+        const listType = note.tags.find(t => t.startsWith("list/"));
+
+        let summary = { updatedSections: 0, totalItems: 0 };
+
+        switch (listType) {
+          case "list/project":
+          case "list/software":
+          case "list/people":
+          case "list/reference":
+            summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
+            break;
+          case "list/related":
+            summary = await plugin.updateAllRelatedSections(app, note.uuid, domainTags);
+            break;
+        }
+
+        totalNotes++;
+        totalSections += summary.updatedSections;
+        totalItems += summary.totalItems;
+      }
+
+      await app.alert(
+        `✅ Updated ${totalNotes} list notes\n` +
+        `Sections refreshed: ${totalSections}\n` +
+        `Total items updated: ${totalItems}`
+      );
+    }, // end Update All Lists
+  }, // end appOption
+
+  // #################################################################################################
 // #################################################################################################
 //                                          Link Actions
 // #################################################################################################
@@ -2059,54 +2052,6 @@
 */
     }, // end Update Note
 
-    // =============================================================================================
-    // Update All Lists
-    // This function is the orchestrator for updating all list notes in whatever ways are 
-    // appropriate
-    // =============================================================================================
-
-    "Update All Lists": async function (app) {
-      const plugin = this;
-
-      // 1. Get all list/* notes
-      const listNotes = await plugin.getFilteredNotes(app, "list");
-
-      let totalNotes = 0;
-      let totalSections = 0;
-      let totalItems = 0;
-
-      // 2. Update each list note using existing logic
-      for (const note of listNotes) {
-        const domainTags = note.tags.filter(t => t.startsWith("d/"));
-        const listType = note.tags.find(t => t.startsWith("list/"));
-
-        let summary = { updatedSections: 0, totalItems: 0 };
-
-        switch (listType) {
-          case "list/project":
-          case "list/software":
-          case "list/people":
-          case "list/reference":
-            summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
-            break;
-          case "list/related":
-            summary = await plugin.updateAllRelatedSections(app, note.uuid, domainTags);
-            break;
-        }
-
-        totalNotes++;
-        totalSections += summary.updatedSections;
-        totalItems += summary.totalItems;
-      }
-
-      await app.alert(
-        `✅ Updated ${totalNotes} list notes\n` +
-        `Sections refreshed: ${totalSections}\n` +
-        `Total items updated: ${totalItems}`
-      );
-    }, // end Update All Lists
-
-
     // ===============================================================================================
     // Note option wrapper to run Tagging Cleanup manually
     // ===============================================================================================
@@ -2182,39 +2127,46 @@
 */
 
     // ===============================================================================================
-    // Testing new functionality for AI updates
+    // Copy recent updates from Daily Jots
     // ===============================================================================================
-    "Test Preprocessor": async function(app, noteUUID) {
-      const plugin = this;
+    "Copy Recent Updates": async function(app, noteUUID) {
+    const plugin = this;
+      const noteHandle = await app.notes.find(noteUUID);
+      const projectName = noteHandle.name;
 
-      // 1. Load the current note (assumed to be the project note)
-      const currNote = await app.findNote(noteUUID);
-      if (!currNote) {
-        await app.alert("❌ Could not find the current note.");
+      // Step 1: Get recent jot backlinks to this project
+      const jotHandles = await plugin.getRecentJotsReferencingProject(app, noteHandle);
+      if (jotHandles.length === 0) {
+        await app.alert("⚠️ No recent updates found.");
         return;
       }
 
-      // 2. Run the summarizer
-      const result = await plugin.summarizeRecentUpdates(app, currNote);
-      if (!result) {
-        await app.alert("⚠️ No recent updates found for this project.");
+      // Step 2: Collect raw excerpts from each jot
+      let allExcerpts = [];
+      for (const jotHandle of jotHandles) {
+        const excerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
+        if (Array.isArray(excerpts) && excerpts.length > 0) {
+          allExcerpts.push(...excerpts.map(e => e.trim()));
+        }
+      }
+
+      if (allExcerpts.length === 0) {
+        await app.alert("⚠️ No matching bullets found in daily jots.");
         return;
       }
 
-      // 3. Build the combined prompt output
-      const combinedPrompt = 
-    `Prompt for Project: ${result.projectName}
+      // Step 3: Format the combined output
+      const combinedMarkdown = allExcerpts.join("\n\n");
 
-    === SYSTEM PROMPT ===
-    ${result.systemPrompt}
+      // Step 4: Replace the content under the '## Recent Updates' header in the project note
+      await app.replaceNoteSection({
+        uuid: noteUUID,
+        sectionTitle: "Recent Updates",
+        newContent: combinedMarkdown
+      });
 
-    === USER PROMPT ===
-    ${result.userPrompt}
-    `;
-
-      // 4. Show the result in an alert (so you can copy it into ChatGPT for testing)
-      await app.alert(combinedPrompt);
-    }, // end Test Preprocessor
+      await app.alert("✅ Recent Updates inserted.");
+    }, // end Copy Recent Updates
 
 
     // ===============================================================================================
