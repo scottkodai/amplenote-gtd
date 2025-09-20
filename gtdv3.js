@@ -756,7 +756,7 @@
     });
 
     // 4. Iterate through recentJots and pull out context and contents
-    await app.alert(JSON.stringify(recentJots));
+    await app.alert(JSON.stringify(recentJots.name));
 
   }, //end updateRecentUpdatesSection
 
