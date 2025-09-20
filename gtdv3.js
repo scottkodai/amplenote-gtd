@@ -1802,16 +1802,17 @@
   // ===============================================================================================
   preprocessDailyJotForProject: async function(app, jotHandle, projectHandle) {
     const plugin = this;
-    const results = [];
-
-    const dateLabel = jotHandle.name;
     const content = await app.getNoteContent(jotHandle);
     const lines = content.split("\n");
 
     const projectUUID = projectHandle.uuid;
+    const projectName = projectHandle.name;
+    const dateLabel = jotHandle.name;
+    const url = `https://www.amplenote.com/notes/${jotHandle.uuid}`;
 
     let currentHeading = null;
     let stack = [];
+    let results = [];
 
     function getIndent(line) {
       const match = line.match(/^(\s*)-/);
@@ -1821,7 +1822,7 @@
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // Step 1: Track top-level headings
+      // Track relevant headings
       const headingMatch = line.match(/^#{1,6}\s+(.*)/);
       if (headingMatch) {
         const headingText = headingMatch[1].trim();
@@ -1836,22 +1837,18 @@
 
       if (!currentHeading) continue;
 
-      // Step 2: Track bullets & breadcrumb trail
       if (/^\s*-\s+/.test(line)) {
         const indent = getIndent(line);
-        const text = line.trim().slice(2);  // remove "- " from start
+        const text = line.trim().slice(2);
 
-        // Update breadcrumb stack
         while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
           stack.pop();
         }
 
         stack.push({ text, indent, raw: line });
 
-        // Step 3: Check for project link
         const linkMatch = line.match(/\(https:\/\/www\.amplenote\.com\/notes\/([a-f0-9-]+)\)/);
         if (linkMatch && linkMatch[1] === projectUUID) {
-          // Capture child bullets (indented beneath this one)
           let childLines = [];
 
           for (let j = i + 1; j < lines.length; j++) {
@@ -1859,7 +1856,7 @@
             if (/^\s*-\s+/.test(nextLine)) {
               const nextIndent = getIndent(nextLine);
               if (nextIndent > indent) {
-                childLines.push(nextLine.trim());
+                childLines.push(nextLine);
               } else if (nextIndent <= indent) {
                 break;
               }
@@ -1872,16 +1869,15 @@
           let contextLabel = currentHeading;
           if (breadcrumb) contextLabel += " → " + breadcrumb;
 
-          // Store the result as a structured object
           results.push({
-            jotHandle,
-            contextLabel,
-            bullets: childLines.length ? childLines : [line.trim()]
+            date: dateLabel,
+            url,
+            context: contextLabel,
+            lines: childLines
           });
         }
       }
     }
-
     return results;
   }, // end preprocessDailyJotForProject
 
@@ -2137,68 +2133,42 @@
     "Copy Recent Updates": async function(app, noteUUID) {
       const plugin = this;
       const noteHandle = await app.findNote(noteUUID);
-      const projectName = noteHandle.name;
 
-      // Step 1: Get recent jot backlinks to this project
       const jotHandles = await plugin.getRecentJotsReferencingProject(app, noteHandle);
       if (jotHandles.length === 0) {
         await app.alert("⚠️ No recent updates found.");
         return;
       }
 
-      // Step 2: Collect raw excerpts from each jot
-      let allBlocks = [];
+      let allMarkdown = [];
+      let footnoteCounter = 1;
 
       for (const jotHandle of jotHandles) {
-        const rawExcerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
-        if (!Array.isArray(rawExcerpts) || rawExcerpts.length === 0) continue;
+        const excerpts = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
+        for (const excerpt of excerpts) {
+          const headerLine = `- [${excerpt.date}](${excerpt.url}) – ${excerpt.context}`;
 
-        // Convert each block of content into properly indented markdown
-        for (const excerpt of rawExcerpts) {
-          const lines = excerpt.split("\n");
-
-          // First line is the heading
-          const [headerLine, ...contentLines] = lines;
-          const headerMatch = headerLine.match(/^\[(.+?)\]\((https:\/\/www\.amplenote\.com\/notes\/[a-f0-9-]+)\)\s*[-–]\s*(.+)$/);
-          let context = "";
-          let dateText = "";
-          let dateLink = "";
-          if (headerMatch) {
-            dateText = headerMatch[1];
-            dateLink = headerMatch[2];
-            context = headerMatch[3];
-          } else {
-            continue; // Skip malformed block
-          }
-
-          // Top-level bullet with link and context
-          const header = `- [${dateText}](${dateLink}) – ${context}`;
-
-          // Re-indent all content lines based on their leading space
-          const indentedLines = contentLines.map(line => {
-            const match = line.match(/^(\s*)[-*]\s+(.*)$/);
-            const indentLevel = match ? match[1].length : 0;
+          // Convert lines to markdown with proper indentation
+          const contentLines = excerpt.lines.map(line => {
+            const match = line.match(/^(\s*)-\s+(.*)$/);
+            const baseIndent = match ? match[1].length : 0;
             const content = match ? match[2] : line.trim();
-            const prefix = "  ".repeat(indentLevel + 1); // +1 ensures all are nested at least one level
+            const prefix = "  ".repeat((baseIndent / 2) + 1);
             return `${prefix}- ${content}`;
           });
 
-          const block = [header, ...indentedLines].join("\n");
-          allBlocks.push(block);
+          const block = [headerLine, ...contentLines].join("\n");
+
+          const { updatedContent, nextCounter } = plugin.uniquifyFootnotes(block, footnoteCounter);
+          footnoteCounter = nextCounter;
+
+          allMarkdown.push(updatedContent);
         }
       }
 
-      if (allBlocks.length === 0) {
-        await app.alert("⚠️ No matching bullets found in daily jots.");
-        return;
-      }
+      const finalMarkdown = allMarkdown.join("\n\n");
 
-      // Step 3: Merge all and uniquify footnotes
-      const combinedMarkdown = allBlocks.join("\n\n");
-      const { updatedContent } = plugin.uniquifyFootnotes(combinedMarkdown.trim(), 1);
-
-      // Step 4: Replace the 'Recent Updates' section in the project note
-      await app.replaceNoteContent(noteUUID, updatedContent, {
+      await app.replaceNoteContent(noteUUID, finalMarkdown, {
         section: { heading: { text: "Recent Updates" } }
       });
 
