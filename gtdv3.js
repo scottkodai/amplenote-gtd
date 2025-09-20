@@ -2145,30 +2145,46 @@
         return;
       }
 
-      // Step 2: Normalize links and collect formatted update blocks
       const normalize = plugin.normalizeNoteHandle;
       let combinedMarkdown = "";
+      const allFootnotes = [];
 
       for (const jotHandle of jotHandles) {
         const updateBlocks = await plugin.preprocessDailyJotForProject(app, jotHandle, noteHandle);
         if (!Array.isArray(updateBlocks) || updateBlocks.length === 0) continue;
 
+        // Track which footnote labels are referenced in this jot
+        const referencedLabels = new Set();
+
         for (const block of updateBlocks) {
           const { jotHandle, contextLabel, bullets } = block;
-
           const jot = normalize(jotHandle);
           const titleLine = `- [${jot.name}](${jot.url}) – ${contextLabel}`;
 
-          const subBullets = bullets
-            .map(line => {
-              const match = line.match(/^(\s*)-\s+/);
-              const indent = match ? match[1] : "";
-              const text = line.replace(/^(\s*)-\s+/, "");
-              return `${indent}- ${text}`;
-            })
-            .join("\n");
+          // Scan for referenced footnote labels
+          for (const line of bullets) {
+            const matches = [...line.matchAll(/\[\^([^\]\s]+?)\]/g)];
+            for (const match of matches) {
+              referencedLabels.add(match[1]);
+            }
+          }
+
+          // Preserve indentation and formatting
+          const subBullets = bullets.map(line => line).join("\n");
 
           combinedMarkdown += `${titleLine}\n${subBullets}\n\n`;
+        }
+
+        // Now fetch the full content of the jot and extract only relevant definitions
+        if (referencedLabels.size > 0) {
+          const content = await app.getNoteContent(jotHandle);
+          const allDefs = [...content.matchAll(/^\[\^([^\]\s]+?)\]: (.+)$/gm)];
+
+          for (const [_, label, def] of allDefs) {
+            if (referencedLabels.has(label)) {
+              allFootnotes.push(`[^${label}]: ${def}`);
+            }
+          }
         }
       }
 
@@ -2177,10 +2193,15 @@
         return;
       }
 
-      // Step 3: Fix footnotes before inserting
+      // Step 2: Append footnotes before uniquifying
+      if (allFootnotes.length) {
+        combinedMarkdown += "\n\n" + allFootnotes.join("\n");
+      }
+
+      // Step 3: Uniquify all footnotes
       const { updatedContent } = plugin.uniquifyFootnotes(combinedMarkdown.trim(), 1);
 
-      // Step 4: Replace the content under the 'Recent Updates' header in the project note
+      // Step 4: Replace the 'Recent Updates' section in the project note
       await app.replaceNoteContent(noteUUID, updatedContent, {
         section: { heading: { text: "Recent Updates" } }
       });
