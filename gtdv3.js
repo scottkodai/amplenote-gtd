@@ -776,6 +776,9 @@
         const sourceNoteHandle = jot;
         const backlinkContents = await app.getNoteBacklinkContents(targetNoteHandle, sourceNoteHandle);
 
+        // if there isn't any backlink content, skip
+        if (backlinkContents.length === 0) continue;
+
         // Normalize the Jot name and url
         const jotLink = this.normalizeNoteHandle(jot);
 
@@ -788,11 +791,16 @@
           });
         });
       }
+    
+    // 6. Build markdown for output
+    const markdown = updates.map(u =>
+      `- [${u.name}](${u.noteURL})\n${u.markdown}`
+    ).join("\n\n");
 
-      // Debug output for now
-      await app.alert(updates.map(u =>
-        `- [${u.name}](${u.noteURL})\n${u.markdown}`
-      ).join("\n\n"));
+    // 7. Replace section content
+    await app.replaceNoteContent(noteUUID, markdown, {
+      section: { heading: { text: sectionHeading } }
+    });
 
   }, //end updateRecentUpdatesSection
 
