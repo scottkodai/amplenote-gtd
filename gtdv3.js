@@ -112,6 +112,14 @@
     }).join("\n");
   }, // end normalizeIndentationForSubtree
 
+  // ===============================================================================================
+  // Strips indentation comments from backlinked markdown so they don't mess with indentation
+  // Called from: updateRecentUpdatesSection
+  // ===============================================================================================
+  stripAmplenoteIndentComments: function (Markdown) {
+    return markdown.replace(/ *<!--\s*\{["']?indent["']?:\s*\d+\s*\}\s*-->/g, "");
+  }, // end stripAmplenoteIndentComments
+
 // #################################################################################################
 // #################################################################################################
 //
@@ -811,6 +819,9 @@
 
         // Append each backlink with date + content
         backlinkContents.forEach(content => {
+          // strip out any embedded comments that might affect indentation
+          const cleanedContent = this.stripAmplenoteIndentComments(content);
+          // uniquify any footnotes so the don't conflict
           const {updatedContent, nextCounter } = this.uniquifyFootnotes(content,footnoteCounter);
           footnoteCounter = nextCounter;
 
