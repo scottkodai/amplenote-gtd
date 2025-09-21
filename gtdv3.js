@@ -140,7 +140,7 @@
   // Called from: updateRecentUpdatesSection
   // ===============================================================================================
   stripAmplenoteIndentComments: function (markdown) {
-    return markdown.replace(/ *<!--\s*\{["']?indent["']?:\s*\d+\s*\}\s*-->/g, "");
+    return markdown.replace(/<!--\s*\{["']?indent["']?:\s*\d+\s*\}\s*-->/g, "");
   }, // end stripAmplenoteIndentComments
 
 // #################################################################################################
@@ -847,7 +847,7 @@
             if (isEmptyLinkOnly) return;
           // strip out any embedded comments that might affect indentation
           const cleanedContent = this.stripAmplenoteIndentComments(content);
-          // uniquify any footnotes so the don't conflict
+          // uniquify any footnotes so they don't conflict
           const {updatedContent, nextCounter } = this.uniquifyFootnotes(cleanedContent,footnoteCounter);
           footnoteCounter = nextCounter;
 
