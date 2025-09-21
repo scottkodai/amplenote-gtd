@@ -90,7 +90,7 @@
   // Normalizes indentation for sub-bullets for Recent Updates using four spaces per indent
   // Called from: updateRecentUpdatesSection
   // ===============================================================================================
-  normalizeIndentationForSubtree: function (markdown, indent = "    ") { // 4 spaces per bullet
+  normalizeIndentationForSubtree: function (markdown, indentSpaces = 4) { // 4 spaces per bullet
     // split the input markdown by line
     const lines = markdown.split("\n");
     // Variable to hold return value
@@ -98,12 +98,15 @@
     // Variable to track footnote blocks
     let inFootnoteBlock = false;
     
-    // Step 1: Collect relevant lines to measure indentation (ignore footnotes, blank, etc.)
-      const indentLevels = lines
-        .filter(line => line.trim() !== "" && !line.match(/^\[\^.+?\]:/))
-        .map(line => line.match(/^ */)[0].length);
+    // Step 1: Find minimum indent (ignore footnotes, blank, etc.)
+    const contentLines = lines.filter(line =>
+        line.trim() !== "" && !line.match(/^\[\^.+?\]:/)
+      );
+      const minIndentSpaces = contentLines.length > 0
+        ? Math.min(...contentLines.map(line => line.match(/^ */)[0].length))
+        : 0;
 
-      const minSpaces = indentLevels.length > 0 ? Math.min(...indentLevels) : 0;
+      const shiftLeftBy = minIndentSpaces - indentSpaces;
 
     // Step 2: Normalize all lines, correctly skipping any lines in a footnote definition
     for (const line of lines) {
@@ -126,9 +129,7 @@
         if (inFootnoteBlock || isBlank) {
           normalizedLines.push(line); // don't touch footnotes or blank lines
         } else {
-          const currentSpaces = line.match(/^ */)[0].length;
-          const relativeLevel = Math.floor((currentSpaces - minSpaces) / 4) + 1;
-          normalizedLines.push(indent.repeat(Math.max(0, relativeLevel)) + line.trimStart());
+          normalizedLines.push(line.slice(shiftLeftBy)); //shift each line equally
         }
       }
       return normalizedLines.join("\n");
