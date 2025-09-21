@@ -86,6 +86,30 @@
     return tag;
   }, // end getNoteType
 
+  // ===============================================================================================
+  // Normalizes indentation for sub-bullets for Recent Updates
+  // Called from: updateRecentUpdatesSection
+  // ===============================================================================================
+  normalizeIndentationForSubtree: function (markdown, indent = "  ") {
+    // Split the markdown into lines
+    const lines = markdown.split("\n");
+
+    // Get the minimum leading space count (ignore blank lines & footnotes)
+    const spaceCounts = lines
+      .filter(line => line.trim() !== "" && !line.match(/^\[\^.+?\]:/))
+      .map(line => line.match(/^ */)[0].length);
+
+    const minLeading = spaceCounts.length > 0 ? Math.min(...spaceCounts) : 0;
+
+    // Re-indent all lines by reducing them by the minimum leading spaces, so the top-level
+    // bullets of the content will be flush left, then adding the base indentation (two spaces
+    // by default)
+    return lines.map(line => {
+      if (/^\[\^.+?\]:/.test(line)) return line; // Don't indent footnote defs
+      return indent + line.slice(minLeading);    // Shift left by `minLeading`, then indent
+    }).join("\n");
+  }, // end normalizeIndentationForSubtree
+
 // #################################################################################################
 // #################################################################################################
 //
@@ -787,6 +811,9 @@
         backlinkContents.forEach(content => {
           const {updatedContent, nextCounter } = this.uniquifyFootnotes(content,footnoteCounter);
           footnoteCounter = nextCounter;
+
+          // Adjust indentation to align with top level bullets
+          const indentedContent = this.normalizeIndentationForSubtree(updatedContent);
 
           updates.push({
             name: jotLink.name,
