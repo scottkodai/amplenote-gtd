@@ -87,28 +87,30 @@
   }, // end getNoteType
 
   // ===============================================================================================
-  // Normalizes indentation for sub-bullets for Recent Updates
+  // Normalizes indentation for sub-bullets for Recent Updates using four spaces per indent
   // Called from: updateRecentUpdatesSection
   // ===============================================================================================
-  normalizeIndentationForSubtree: function (markdown, indent = "  ") {
-    // Split the markdown into lines
+  function normalizeIndentationForSubtree(markdown, indent = "    ") { // 4 spaces per bullet
     const lines = markdown.split("\n");
 
-    // Get the minimum leading space count (ignore blank lines & footnotes)
-    const spaceCounts = lines
+    // Step 1: Determine minimum indent level in multiples of 4 (excluding footnotes and blanks)
+    const indentLevels = lines
       .filter(line => line.trim() !== "" && !line.match(/^\[\^.+?\]:/))
-      .map(line => line.match(/^ */)[0].length);
+      .map(line => Math.floor(line.match(/^ */)[0].length / 4));
 
-    const minLeading = spaceCounts.length > 0 ? Math.min(...spaceCounts) : 0;
+    const minLevel = indentLevels.length > 0 ? Math.min(...indentLevels) : 0;
 
-    // Re-indent all lines by reducing them by the minimum leading spaces, so the top-level
-    // bullets of the content will be flush left, then adding the base indentation (two spaces
-    // by default)
+    // Step 2: Normalize indentation based on minLevel
     return lines.map(line => {
-      if (/^\[\^.+?\]:/.test(line)) return line; // Don't indent footnote defs
-      return indent + line.slice(minLeading);    // Shift left by `minLeading`, then indent
+      if (/^\[\^.+?\]:/.test(line)) return line; // Don't indent footnote definitions
+
+      const leadingSpaces = line.match(/^ */)[0].length;
+      const currentLevel = Math.floor(leadingSpaces / 4);
+      const relativeLevel = currentLevel - minLevel + 1; // +1 = one level deeper for nesting
+
+      return indent.repeat(Math.max(0, relativeLevel)) + line.trimStart();
     }).join("\n");
-  }, // end normalizeIndentationForSubtree
+  } // end normalizeIndentationForSubtree
 
 // #################################################################################################
 // #################################################################################################
