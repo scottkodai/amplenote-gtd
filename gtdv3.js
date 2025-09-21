@@ -91,8 +91,13 @@
   // Called from: updateRecentUpdatesSection
   // ===============================================================================================
   normalizeIndentationForSubtree: function (markdown, indent = "    ") { // 4 spaces per bullet
+    // split the input markdown by line
     const lines = markdown.split("\n");
-
+    // Variable to hold return value
+    const normalizedLines = [];
+    // Variable to track footnote blocks
+    let inFootnoteBlock = false;
+    
     // Step 1: Determine minimum indent level in multiples of 4 (excluding footnotes and blanks)
     const indentLevels = lines
       .filter(line => line.trim() !== "" && !line.match(/^\[\^.+?\]:/))
@@ -100,16 +105,34 @@
 
     const minLevel = indentLevels.length > 0 ? Math.min(...indentLevels) : 0;
 
-    // Step 2: Normalize indentation based on minLevel
-    return lines.map(line => {
-      if (/^\[\^.+?\]:/.test(line)) return line; // Don't indent footnote definitions
+    // Step 2: Normalize all lines, correctly skipping any lines in a footnote definition
+    for (const line of lines) {
+        const isFootnoteDef = line.match(/^\[\^.+?\]:/);
+        const isBlank = line.trim() === "";
 
-      const leadingSpaces = line.match(/^ */)[0].length;
-      const currentLevel = Math.floor(leadingSpaces / 4);
-      const relativeLevel = currentLevel - minLevel + 1; // +1 = one level deeper for nesting
+        // if this line is the start of a footnote definition, push it as is and
+        // note that the footnote block has started
+        if (isFootnoteDef) {
+          inFootnoteBlock = true;
+          normalizedLines.push(line); // leave as-is
+          continue;
+        }
 
-      return indent.repeat(Math.max(0, relativeLevel)) + line.trimStart();
-    }).join("\n");
+        // If footnote block ends (non-blank, non-indented line), exit mode
+        if (inFootnoteBlock && !isBlank && !line.startsWith("    ")) {
+          inFootnoteBlock = false;
+        }
+
+        if (inFootnoteBlock || isBlank) {
+          normalizedLines.push(line); // don't touch footnotes or blank lines
+        } else {
+          const leadingSpaces = line.match(/^ */)[0].length;
+          const currentLevel = Math.floor(leadingSpaces / 4);
+          const relativeLevel = currentLevel - minLevel + 1;
+          normalizedLines.push(indent.repeat(Math.max(0, relativeLevel)) + line.trimStart());
+        }
+      }
+      return normalizedLines.join("\n");
   }, // end normalizeIndentationForSubtree
 
   // ===============================================================================================
