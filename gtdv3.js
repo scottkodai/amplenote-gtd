@@ -98,12 +98,12 @@
     // Variable to track footnote blocks
     let inFootnoteBlock = false;
     
-    // Step 1: Determine minimum indent level in multiples of 4 (excluding footnotes and blanks)
-    const indentLevels = lines
-      .filter(line => line.trim() !== "" && !line.match(/^\[\^.+?\]:/))
-      .map(line => Math.floor(line.match(/^ */)[0].length / 4));
+    // Step 1: Collect relevant lines to measure indentation (ignore footnotes, blank, etc.)
+      const indentLevels = lines
+        .filter(line => line.trim() !== "" && !line.match(/^\[\^.+?\]:/))
+        .map(line => line.match(/^ */)[0].length);
 
-    const minLevel = indentLevels.length > 0 ? Math.min(...indentLevels) : 0;
+      const minSpaces = indentLevels.length > 0 ? Math.min(...indentLevels) : 0;
 
     // Step 2: Normalize all lines, correctly skipping any lines in a footnote definition
     for (const line of lines) {
@@ -126,9 +126,8 @@
         if (inFootnoteBlock || isBlank) {
           normalizedLines.push(line); // don't touch footnotes or blank lines
         } else {
-          const leadingSpaces = line.match(/^ */)[0].length;
-          const currentLevel = Math.floor(leadingSpaces / 4);
-          const relativeLevel = currentLevel - minLevel + 1;
+          const currentSpaces = line.match(/^ */)[0].length;
+          const relativeLevel = Math.floor((currentSpaces - minSpaces) / 4) + 1;
           normalizedLines.push(indent.repeat(Math.max(0, relativeLevel)) + line.trimStart());
         }
       }
