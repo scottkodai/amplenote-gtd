@@ -841,7 +841,8 @@
         const jotLink = this.normalizeNoteHandle(jot);
 
         // Append each backlink with date + content
-        backlinkContents.forEach(content => {
+        //backlinkContents.forEach(content => {
+        for (const content of backlinkContents) {
           // skip if this is just a plain link (no sub-bullets)
           const isEmptyLinkOnly = content.trim().match(/^\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)$/i);
             if (isEmptyLinkOnly) return;
