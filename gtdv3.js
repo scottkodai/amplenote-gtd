@@ -110,7 +110,7 @@
 
       return indent.repeat(Math.max(0, relativeLevel)) + line.trimStart();
     }).join("\n");
-  } // end normalizeIndentationForSubtree
+  }, // end normalizeIndentationForSubtree
 
 // #################################################################################################
 // #################################################################################################
