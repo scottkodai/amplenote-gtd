@@ -822,7 +822,7 @@
           // strip out any embedded comments that might affect indentation
           const cleanedContent = this.stripAmplenoteIndentComments(content);
           // uniquify any footnotes so the don't conflict
-          const {updatedContent, nextCounter } = this.uniquifyFootnotes(content,footnoteCounter);
+          const {updatedContent, nextCounter } = this.uniquifyFootnotes(cleanedContent,footnoteCounter);
           footnoteCounter = nextCounter;
 
           // Adjust indentation to align with top level bullets
