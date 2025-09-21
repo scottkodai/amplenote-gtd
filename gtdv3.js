@@ -818,7 +818,7 @@
           updates.push({
             name: jotLink.name,
             noteURL: jotLink.url,
-            markdown: updatedContent
+            markdown: indentedContent
           });
         });
       }
