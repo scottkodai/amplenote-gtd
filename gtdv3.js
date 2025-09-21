@@ -90,7 +90,7 @@
   // Normalizes indentation for sub-bullets for Recent Updates using four spaces per indent
   // Called from: updateRecentUpdatesSection
   // ===============================================================================================
-  function normalizeIndentationForSubtree(markdown, indent = "    ") { // 4 spaces per bullet
+  normalizeIndentationForSubtree: function (markdown, indent = "    ") { // 4 spaces per bullet
     const lines = markdown.split("\n");
 
     // Step 1: Determine minimum indent level in multiples of 4 (excluding footnotes and blanks)
