@@ -851,6 +851,7 @@
           const {updatedContent, nextCounter } = this.uniquifyFootnotes(cleanedContent,footnoteCounter);
           footnoteCounter = nextCounter;
 
+          await app.alert("updatedContent:\n" + updatedContent);
           // Adjust indentation to align with top level bullets
           const indentedContent = this.normalizeIndentationForSubtree(updatedContent);
 
