@@ -842,6 +842,9 @@
 
         // Append each backlink with date + content
         backlinkContents.forEach(content => {
+          // skip if this is just a plain link (no sub-bullets)
+          const isEmptyLinkOnly = content.trim().match(/^\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)$/i);
+            if (isEmptyLinkOnly) return;
           // strip out any embedded comments that might affect indentation
           const cleanedContent = this.stripAmplenoteIndentComments(content);
           // uniquify any footnotes so the don't conflict
