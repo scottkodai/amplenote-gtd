@@ -116,7 +116,7 @@
   // Strips indentation comments from backlinked markdown so they don't mess with indentation
   // Called from: updateRecentUpdatesSection
   // ===============================================================================================
-  stripAmplenoteIndentComments: function (Markdown) {
+  stripAmplenoteIndentComments: function (markdown) {
     return markdown.replace(/ *<!--\s*\{["']?indent["']?:\s*\d+\s*\}\s*-->/g, "");
   }, // end stripAmplenoteIndentComments
 
