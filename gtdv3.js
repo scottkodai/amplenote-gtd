@@ -106,7 +106,7 @@
         ? Math.min(...contentLines.map(line => line.match(/^ */)[0].length))
         : 0;
 
-      const shiftLeftBy = minIndentSpaces - indentSpaces;
+      const shiftLeftBy = Math.max(0,minIndentSpaces - indentSpaces);
 
     // Step 2: Normalize all lines, correctly skipping any lines in a footnote definition
     for (const line of lines) {
