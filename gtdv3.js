@@ -770,6 +770,7 @@
 
     // 5. Iterate through recentJots and pull out context and contents
     const targetNoteHandle = { uuid: noteUUID };
+    let footnoteCounter = 1;
 
       const updates = [];
       for (const jot of recentJots) {
@@ -784,10 +785,13 @@
 
         // Append each backlink with date + content
         backlinkContents.forEach(content => {
+          const {updatedContent, nextCounter } = this.uniquifyFootnotes(content,footnoteCounter);
+          footnoteCounter = nextCounter;
+
           updates.push({
             name: jotLink.name,
             noteURL: jotLink.url,
-            markdown: content
+            markdown: updatedContent
           });
         });
       }
