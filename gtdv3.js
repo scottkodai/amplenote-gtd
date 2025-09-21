@@ -127,7 +127,7 @@
           normalizedLines.push(line); // don't touch footnotes or blank lines
         } else {
           const currentSpaces = line.match(/^ */)[0].length;
-          const relativeLevel = Math.floor((currentSpaces - minSpaces) / 4) + 1;
+          const relativeLevel = Math.floor((currentSpaces - minSpaces) / 4);
           normalizedLines.push(indent.repeat(Math.max(0, relativeLevel)) + line.trimStart());
         }
       }
