@@ -1676,15 +1676,15 @@
     }
 
     // === Refresh related note sections ===
-    const domainTags = note.tags.filter(t => t.startsWith("d/"));
-    await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+    //const domainTags = note.tags.filter(t => t.startsWith("d/"));
+    //await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
 
     // === Loop if requested ===
     if (actionWasContinue) {
       await plugin.setNoteTags(app, noteUUID);
     }
     // run taggingCleanup to make sure it's current
-    await this.taggingCleanup(app);
+    //await this.taggingCleanup(app);
   }, // end setNoteTags
 
   // ===============================================================================================
@@ -2220,3 +2220,4 @@
     } // end Refresh Deadline Tasks
   } // end noteOption
 } // end plugin
+ 
