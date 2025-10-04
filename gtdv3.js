@@ -492,7 +492,8 @@
       const {
         noteIdPrefix = 'note-id/', // tag used to uniquely identify a note (e.g., "note-id/20250823...")
         parentTagPrefix = 'r/parent/', // tag prefix used on child notes to point to their parent
-        childTagPrefix = 'r/child/', // not currently used (included for symmetry)
+        // not currently used (included for symmetry)
+        childTagPrefix = 'r/child/', // eslint-disable-line no-unused-vars
         includeChildren = true, // whether to include child notes
         indentLevel = 0, // how far to indent this level of the list
         visited = new Set(), // keeps track of rendered notes to avoid infinite loops
@@ -600,7 +601,8 @@
         baseNotes, // array of notes to include in the list
         groupByStatus = 'full', // "flat" or "full" grouping style
         includeChildren = true, // whether to include child projects
-        format = 'standard', // placeholder for future use
+        // placeholder for future use
+        format = 'standard', // eslint-disable-line no-unused-vars
         sortCompletedByDate = true, // if true, completed projects sorted newest first
         ignoreParentFiltering = false, // ✅ if true, allow child projects to be listed top-level
       },
@@ -812,7 +814,7 @@
     // Updates any existing Recent Updates section with backlinks from recent Daily Jots
     // Called from:
     // ===============================================================================================
-    updateRecentUpdatesSection: async function (app, noteUUID, domaintTags = []) {
+    updateRecentUpdatesSection: async function (app, noteUUID) {
       const sectionHeading = 'Recent Updates';
 
       // Utility to remove ordinal suffixes from day numbers in Jot names
@@ -1934,7 +1936,7 @@
     // set categories on people, software, and reference notes
     // ===============================================================================================
     updateSystemCategories: async function (app) {
-      const plugin = this;
+      //const plugin = this;
 
       /**
        * Extracts all unique subtags from reference notes,
@@ -2123,13 +2125,13 @@
       // appropriate
       // =============================================================================================
       'Update Note': async function (app, noteUUID) {
-        const plugin = this;
+        //const plugin = this;
         const note = await app.notes.find(noteUUID);
 
         // Detect any domain tags (d/work, d/home, etc.)
-        const domainTags = note.tags.filter((t) => t.startsWith('d/'));
+        //const domainTags = note.tags.filter((t) => t.startsWith('d/'));
 
-        let summary = { updatedSections: 0, totalItems: 0 };
+        //let summary = { updatedSections: 0, totalItems: 0 };
 
         const isListNote = note.tags.some((t) => t.startsWith('list/'));
         if (isListNote) {
@@ -2141,17 +2143,17 @@
             case 'list/people':
             case 'list/reference':
               // Bracketed text flat mode updates, filtered by domain
-              summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
+              //summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
               break;
 
             case 'list/related':
               // Run existing Related * section updates, filtered by domain
-              summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+              //summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
               break;
           }
         } else {
           // Non-list note → only update Related sections, filtered by domain
-          summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+          //summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
         }
 
         /*
