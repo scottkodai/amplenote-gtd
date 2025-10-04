@@ -2298,4 +2298,6 @@
     //#endregion
   }; // end plugin object
   return plugin;
-})(); // end plugin
+  // using prettier-ignore below so it doesn't warn about a missing trailing semicolon
+  // which is not allowed by Amplenote
+})() // prettier-ignore
