@@ -1,0 +1,11 @@
+// VS Code workspace settings for Amplenote plugin (using jsonc to avoid warnings)
+{
+	"editor.formatOnSave": true,
+	"[javascript]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"editor.codeActionsOnSave": {
+		"source.fixAll.eslint": true
+	},
+	"eslint.validate": ["javascript"]
+}
