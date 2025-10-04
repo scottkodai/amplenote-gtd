@@ -2131,7 +2131,7 @@
         // Detect any domain tags (d/work, d/home, etc.)
         const domainTags = note.tags.filter((t) => t.startsWith('d/'));
 
-        let summary = { updatedSections: 0, totalItems: 0 };
+        //let summary = { updatedSections: 0, totalItems: 0 };
 
         const isListNote = note.tags.some((t) => t.startsWith('list/'));
         if (isListNote) {
@@ -2143,24 +2143,29 @@
             case 'list/people':
             case 'list/reference':
               // Bracketed text flat mode updates, filtered by domain
-              summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
+              //summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
+              await plugin.updateBracketedSections(app, note, listType, domainTags);
               break;
 
             case 'list/related':
               // Run existing Related * section updates, filtered by domain
-              summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+              //summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+              await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
               break;
           }
         } else {
           // Non-list note → only update Related sections, filtered by domain
-          summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+          //summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+          await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
         }
 
+        /*
         await app.alert(
           `✅ Update complete for "${note.name}"\n` +
             `Sections updated: ${summary.updatedSections}\n` +
             `Total items updated: ${summary.totalItems}`,
         );
+        */
       }, // end Update Note
 
       // ===============================================================================================
