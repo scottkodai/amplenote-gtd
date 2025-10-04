@@ -1,1 +1,23 @@
+# Ensure all text files use LF line endings
 * text=auto eol=lf
+
+# Explicitly define common file types (optional but helpful)
+*.js     text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+*.css    text eol=lf
+*.html   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+
+# Binary files (images, fonts, etc.) - treat as binary to prevent corruption
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.svg    binary
+*.woff   binary
+*.woff2  binary
+
+# Prevent merge conflicts in lock files
+package-lock.json merge=union
