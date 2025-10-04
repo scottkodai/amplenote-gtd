@@ -1,4 +1,7 @@
 node_modules/
-.vscode/
-!.vscode/settings.jsonc
 .DS_Store
+
+# ignore everything in .vscode except settings.jsonc
+.vscode/*
+!.vscode/settings.jsonc
+
