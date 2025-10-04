@@ -2171,7 +2171,7 @@
       // ===============================================================================================
       // Note option wrapper to run Tagging Cleanup manually
       // ===============================================================================================
-      'Run Tagging Cleanup': async function (app, noteUUID) {
+      'Run Tagging Cleanup': async function (app) {
         await this.taggingCleanup(app);
       }, // End Run Tagging Cleanup
 
