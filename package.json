@@ -1,10 +1,12 @@
 {
-  "name": "gtdv3-plugin",
+  "name": "amplenote-gtd",
   "version": "1.0.0",
   "type": "module",
-  "main": "gtdv3.js",
+  "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node esbuild.config.cjs",
+    "watch": "node esbuild.config.cjs --watch"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +18,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-prettier": "^5.5.4",
-    "prettier": "^3.6.2"
+    "prettier": "^3.6.2",
+    "esbuild": "^0.25.10"
   }
 }
