@@ -1,7 +1,15 @@
+# Dependencies
 node_modules/
+
+# Build output
+dist/
+
+# OS files
 .DS_Store
+Thumbs.db
+
 
 # ignore everything in .vscode except settings.jsonc
 .vscode/*
 !.vscode/settings.jsonc
-
+*.code-workspace
