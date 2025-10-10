@@ -2044,7 +2044,7 @@
        * @returns {Promise<string[]>} - Sorted list of category paths
        */
       async function getReferenceCategories(baseTag, excludeFirstLevel = []) {
-        const notes = await app.filterNotes({ tag: baseTag });
+        const notes = await this._getCachedNotes(app, baseTag);
         const categories = new Set();
 
         for (let note of notes) {
