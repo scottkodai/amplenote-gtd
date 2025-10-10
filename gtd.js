@@ -1862,6 +1862,10 @@
       const plugin = this;
       const cleanupResults = [];
 
+      // Refresh the notes cache and use cache throughout
+      this.invalidateNoteCache();
+      let allNotes = await plugin._getCachedNotes(app);
+
       // Helper to normalize, sort, and link notes
       const formatNoteList = (notes) => {
         return notes
@@ -1872,7 +1876,6 @@
       };
 
       // A: Missing critical tag
-      let allNotes = await app.filterNotes({ tag: '^archive,^exclude' });
       const criticalPrefixes = ['daily-jots', 'list/', 'reference/', 'system', 'project/'];
       const missingCritical = allNotes.filter(
         (n) => !n.tags.some((tag) => criticalPrefixes.some((prefix) => tag.startsWith(prefix))),
@@ -1888,13 +1891,10 @@
         'project/on-hold',
         'project/tracking',
       ];
-      let missingPeople = [];
-      for (const status of projectStatuses) {
-        const projects = await plugin.getFilteredNotes(app, status);
-        missingPeople.push(
-          ...projects.filter((n) => !n.tags.some((tag) => tag.startsWith('r/people/'))),
-        );
-      }
+      const missingPeople = allNotes.filter(n => 
+          projectStatuses.some(status => n.tags.includes(status)) && 
+          !n.tags.some(tag => tag.startsWith('r/people/'))
+      );
       if (missingPeople.length > 0) {
         cleanupResults.push({
           reason: 'Active project notes with no r/people tag',
