@@ -327,7 +327,7 @@
       // Find notes with matching note-id/* tags
       const parents = [];
       for (const pid of parentIds) {
-        const matches = await app.filterNotes({ tag: `note-id/${pid}` });
+        const matches = await this._getCachedNotes(app, `note-id/${pid}`);
         if (matches.length > 0) parents.push(this.normalizeNoteHandle(matches[0]));
       }
       return parents;
@@ -348,7 +348,7 @@
 
       const children = [];
       for (const cid of childIds) {
-        const matches = await app.filterNotes({ tag: `note-id/${cid}` });
+        const matches = await this._getCachedNotes(app, `note-id/${cid}`);
         if (matches.length > 0) children.push(this.normalizeNoteHandle(matches[0]));
       }
       return children;
