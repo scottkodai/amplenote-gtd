@@ -1,5 +1,115 @@
 (() => {
   const plugin = {
+    //#region Cache Management
+    // #################################################################################################
+    // #################################################################################################
+    //
+    //                                     Cache Management
+    //
+    // #################################################################################################
+    // #################################################################################################
+
+    _noteCache: null,
+    _taskCache: null,
+    _lastNoteCacheUpdate: null,
+    _lastTaskCacheUpdate: null,
+    _cacheTTL: 15 * 60 * 1000, // 15 minutes in milliseconds
+
+    // Cache validation functions
+    _isNoteCacheValid: function() {
+      if (!this._lastNoteCacheUpdate) return false;
+      return (Date.now() - this._lastNoteCacheUpdate) < this._cacheTTL;
+    },
+
+    _isTaskCacheValid: function() {
+      if (!this._lastTaskCacheUpdate) return false;
+      return (Date.now() - this._lastTaskCacheUpdate) < this._cacheTTL;
+    },
+
+    // Explicit cache invalidation methods
+    invalidateNoteCache: function() {
+      this._noteCache = null;
+      this._lastNoteCacheUpdate = null;
+    },
+
+    invalidateTaskCache: function() {
+      this._taskCache = null;
+      this._lastTaskCacheUpdate = null;
+    },
+
+    // Method to explicitly refresh caches
+    refreshCaches: async function(app, options = {}) {
+      const { notes = true, tasks = true } = options;
+      
+      if (notes) {
+        await this._getCachedNotes(app);
+      }
+      
+      if (tasks) {
+        await this._getCachedTasks(app);
+      }
+    },
+
+    // Get filtered notes with caching
+    _getCachedNotes: async function(app, baseTag = '', domainTags = []) {
+      // If cache is invalid or doesn't exist, refresh it
+      if (!this._isNoteCacheValid() || !this._noteCache) {
+        const notes = await app.filterNotes({ tag: '^archive,^exclude' });
+        this._noteCache = notes;
+        this._lastNoteCacheUpdate = Date.now();
+      }
+
+      // Filter cached notes based on parameters
+      let filtered = this._noteCache;
+      
+    if (baseTag) {
+        // Special handling for note-id lookups
+        if (baseTag.startsWith('note-id/')) {
+            filtered = filtered.filter(note => 
+                note.tags.some(tag => tag === baseTag)
+            );
+        } else {
+            filtered = filtered.filter(note => 
+                note.tags.some(tag => tag.startsWith(baseTag))
+            );
+        }
+    }
+
+    // Apply domain tag filtering if provided
+    if (domainTags.length > 0) {
+        filtered = filtered.filter(note => {
+          const noteDomainTags = note.tags.filter(t => t.startsWith('d/'));
+          return noteDomainTags.length === 0 || 
+                 domainTags.some(dt => noteDomainTags.includes(dt));
+        });
+      }
+
+      return filtered;
+    },
+
+    // Get cached tasks (now independent of note cache)
+    _getCachedTasks: async function(app, baseTag = '', domainTags = []) {
+      // If no task cache exists or cache is invalid
+      if (!this._isTaskCacheValid() || !this._taskCache) {
+        const notes = await this._getCachedNotes(app, baseTag, domainTags);
+        const allTasks = [];
+        
+        for (const handle of notes) {
+          const note = await app.notes.find(handle.uuid);
+          if (!note) continue;
+          
+          const noteTasks = await note.tasks();
+          allTasks.push(...noteTasks);
+        }
+        
+        this._taskCache = allTasks;
+        this._lastTaskCacheUpdate = Date.now();
+      }
+      
+      return this._taskCache;
+    },
+    //#endregion
+    
     //#region Utility Functions
     // #################################################################################################
     // #################################################################################################
@@ -169,18 +279,7 @@
     // updateBracketedSections, updateRelated* functions, generateUniqueNoteIdTag
     // ===============================================================================================
     getFilteredNotes: async function (app, baseTag = '', domainTags = []) {
-      let query = baseTag ? `${baseTag},^archive,^exclude` : '^archive,^exclude';
-      let notes = await app.filterNotes({ tag: query });
-
-      if (domainTags.length > 0) {
-        notes = notes.filter((n) => {
-          const noteDomainTags = n.tags.filter((t) => t.startsWith('d/'));
-          return (
-            noteDomainTags.length === 0 || domainTags.some((dt) => noteDomainTags.includes(dt))
-          );
-        });
-      }
-      return notes;
+      return await this._getCachedNotes(app, baseTag, domainTags);
     }, // end getFilteredNotes
 
     // ===============================================================================================
@@ -191,26 +290,24 @@
     // Called from: Refresh Deadline Tasks
     // ===============================================================================================
     getAllTasks: async function (app, baseTag = '', domainTags = []) {
-      const plugin = this;
-      const allTasks = [];
-
-      //const start = Date.now(); // start timing
-
-      const noteHandles = await plugin.getFilteredNotes(app, baseTag, domainTags);
-
-      for (const handle of noteHandles) {
-        // Need the full Note object to call .tasks()
-        const note = await app.notes.find(handle.uuid);
-        if (!note) continue;
-
-        const noteTasks = await note.tasks();
-        allTasks.push(...noteTasks);
+      // If no task cache exists or cache is invalid
+      if (!this._isTaskCacheValid() || !this._taskCache) {
+        const notes = await this._getCachedNotes(app, baseTag, domainTags);
+        const allTasks = [];
+        
+        for (const handle of notes) {
+          const note = await app.notes.find(handle.uuid);
+          if (!note) continue;
+          
+          const noteTasks = await note.tasks();
+          allTasks.push(...noteTasks);
+        }
+        
+        this._taskCache = allTasks;
+        this._lastTaskCacheUpdate = Date.now();
       }
-
-      //const elapsed = Date.now() - start; // elapsed ms
-      //await app.alert(`getAllTasks: scanned ${noteHandles.length} notes, found ${allTasks.length} tasks in ${elapsed}ms`);
-
-      return allTasks;
+      
+      return this._taskCache;
     }, // end getAllTasks
 
     // ===============================================================================================
@@ -356,9 +453,9 @@
     }, // end setParentChildRelationship
 
     // ===============================================================
-    // Helper: Get readable relationships for dropdown
+    // Helper: Get relationships for dropdown
     // ===============================================================
-    getReadableRelationships: async function (app, note) {
+    getNoteRelationships: async function (app, note) {
       const plugin = this;
       const results = [];
 
@@ -386,7 +483,7 @@
         const noteId = parts[parts.length - 1];
         const type = parts.slice(1, -1).join('/'); // everything between r/ and note-id
 
-        const matches = await app.filterNotes({ tag: `note-id/${noteId}` });
+        const matches = await plugin._getCachedNotes(app, `note-id/${noteId}`);
         if (matches.length > 0) {
           const handle = plugin.normalizeNoteHandle(matches[0]);
           // Avoid duplicates
@@ -400,7 +497,7 @@
       const noteIdTag = await plugin.getNoteIdTag(app, note);
       const noteIdValue = noteIdTag.split('/')[1];
 
-      let allNotes = await app.filterNotes({ tag: '^archive,^exclude' });
+      let allNotes = await plugin._getCachedNotes(app);
       const relatedNotes = allNotes.filter((n) =>
         n.tags.some((t) => t.startsWith('r/') && t.endsWith(`/${noteIdValue}`)),
       );
@@ -414,7 +511,7 @@
       }
 
       return results;
-    }, // end getReadableRelationships
+    }, // end getNoteRelationships
 
     // ===============================================================
     // Helper: Add relationship with same rules as buildRelationship
@@ -1502,7 +1599,7 @@
       const isSoftwareNote = note.tags.some((t) => t.startsWith('reference/software/'));
       const isHorizonNote = note.tags.some((t) => t.startsWith('reference/horizon/'));
 
-      const currentRelations = await plugin.getReadableRelationships(app, note);
+      const currentRelations = await plugin.getNoteRelationships(app, note);
       const categoryData = await getCategoryDataFromSystemNote(app);
 
       const inputs = [];
