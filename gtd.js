@@ -1843,8 +1843,8 @@
       }
 
       // === Refresh related note sections ===
-      //const domainTags = note.tags.filter(t => t.startsWith("d/"));
-      //await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+      const domainTags = note.tags.filter(t => t.startsWith("d/"));
+      await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
 
       // === Loop if requested ===
       if (actionWasContinue) {
