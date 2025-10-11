@@ -535,11 +535,15 @@
       const noteId = noteIdTag.split('/')[1];
       const relatedNoteId = relatedNoteIdTag.split('/')[1];
 
-      if (noteType.startsWith('project/')) {
+      // Project relationships should always be one-way
+      if (noteType === 'project') {
+        // Project notes have one-way relationship TO other notes (project → related)
         await note.addTag(`r/${relatedType}/${relatedNoteId}`);
-      } else if (relatedType.startsWith('project/')) {
+      } else if (relatedType === 'project') {
+        // Other notes have one-way relationship FROM project notes (project → related)
         await relatedNote.addTag(`r/${noteType}/${noteId}`);
       } else {
+        // Non-project relationships are two-way
         await note.addTag(`r/${relatedType}/${relatedNoteId}`);
         await relatedNote.addTag(`r/${noteType}/${noteId}`);
       }
@@ -565,9 +569,21 @@
         await note.removeTag(`r/child/${targetId}`);
         await target.removeTag(`r/parent/${noteId}`);
       } else {
-        // Remove from both sides if both have the tag
-        await note.removeTag(`r/${plugin.getNoteType(target)}/${targetId}`);
-        await target.removeTag(`r/${plugin.getNoteType(note)}/${noteId}`);
+        const noteType = plugin.getNoteType(note);
+        const targetType = plugin.getNoteType(target);
+        
+        // Check if either note is a project note for correct one-way cleanup
+        if (noteType === 'project') {
+          // Only the project note has the tag
+          await note.removeTag(`r/${targetType}/${targetId}`);
+        } else if (targetType === 'project') {
+          // Only the target project note has the tag
+          await target.removeTag(`r/${noteType}/${noteId}`);
+        } else {
+          // Standard two-way relationship cleanup
+          await note.removeTag(`r/${targetType}/${targetId}`);
+          await target.removeTag(`r/${noteType}/${noteId}`);
+        }
       }
     }, // end removeRelationship
     //#endregion
@@ -2279,65 +2295,59 @@
         await this.clearAllTags(app, noteUUID);
       }, // end Clear Tags
 
-      /*
       // ===============================================================================================
-      // Test function to identify bug in iOS app.
+      // One time project relationaship fix for two-way relationship bug
       // ===============================================================================================
-      "iOS Tag Update Test": async function(app, noteUUID) {
-        // Get the current note
-        const note = await app.notes.find(noteUUID);
+      "Project Relationship Cleanup": async function(app) {
+        const plugin = this;
+        // Invalidate the cache to ensure we're working with fresh data
+        await plugin.invalidateNoteCache();
 
-        // Show starting tags for the note
-        // This works in all versions
-        await app.alert(`Starting tags: ${note.tags.join(", ")}`);
-
-        // First update: remove a 'project/*' tag from the note
-        // This works in web, desktop, and iOS versions
-        const oldStatus = note.tags.find(t => t.startsWith("project/"));
-        if (oldStatus) {
-          await note.removeTag(oldStatus);
+        let allNotes = await plugin._getCachedNotes(app);
+        let modified = 0;
+        let details = [];
+        
+        // Find any note with an r/project/* tag - these should not exist
+        const notesWithProjectTags = allNotes.filter(n => 
+          n.tags.some(t => t.startsWith('r/project/'))
+        );
+        
+        details.push(`Found ${notesWithProjectTags.length} notes with incorrect r/project/* tags`);
+        
+        // Remove all r/project/* tags
+        for (const note of notesWithProjectTags) {
+          const projectTags = note.tags.filter(t => t.startsWith('r/project/'));
+          
+          for (const tag of projectTags) {
+            //await note.removeTag(tag);
+            modified++;
+            details.push(`- Removed tag "${tag}" from "${note.name}"`);
+          }
         }
-
-        // Second update: add the project/active tag
-        // This works in web and desktop, but silently fails in iOS
-        // Note: This *does* work in Chrome/Webkit on iOS... it only fails in the native app
-        await note.addTag("project/active");
-
-        // Verify final tags on the note
-        // This works in web and desktop, but this alert does not display in the iOS app
-        // Note: This also works in  Chrome/Webkit on iOS and only fails in the native app
-        const updatedNote = await app.notes.find(noteUUID);
-        await app.alert(`Ending tags: ${updatedNote.tags.join(", ")}`);
-      }, // end iOS Tag Update Test
-
-      // ===============================================================================================
-      // Test function to identify bug in iOS app
-      // ===============================================================================================
-      "Test Two Adds": async function (app, noteUUID) {
-        // Get the current note
-        const note = await app.notes.find(noteUUID);
-        if (!note) {
-          await app.alert("Note not found");
-          return;
-        }
-
-        // Show starting tags for the note
-        // This works in all versions
-        await app.alert("Before: " + JSON.stringify(note.tags));
-
-        // First add a test tag
-        // This works in all versions
-        await note.addTag("test/tag1");
-
-        // Add a second test tag
-        // This silently fails on the native iOS app, but works everywhere else
-        await note.addTag("test/tag2");
-
-        // This alert does not show on the native iOS app
-        const updatedNote = await app.notes.find(noteUUID);
-        await app.alert("After: " + JSON.stringify(updatedNote.tags));
-      }, // end Test Two Adds
-  */
+        
+        details.push(`\nTotal: Removed ${modified} incorrect r/project/* tags`);
+        
+        // Write results to the dedicated cleanup note
+        const summary = details.join('\n');
+        
+        // Try to find the dedicated cleanup note first
+        let cleanupNote = await app.findNote({ name: 'Project Relationship Cleanup' });
+        
+        if (!cleanupNote) {
+          // Create the note if it doesn't exist
+          cleanupNote = await app.notes.create({
+            name: "Project Relationship Cleanup",
+            content: summary
+          });
+        } else {
+          // Append to the note if it exists (preserving existing content)
+          const existingContent = await app.getNoteContent(cleanupNote.uuid);
+          const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+          const updatedContent = `${existingContent}\n\n## Cleanup Run - ${timestamp}\n${summary}`;
+          await app.replaceNoteContent(cleanupNote.uuid, updatedContent);
+        }        
+        await app.alert(`✅ Cleanup complete. Removed ${modified} incorrect tags. Details written to "Project Relationship Cleanup" note.`);
+      }, // end Project Relationship Cleanup
 
       // ===============================================================================================
       // Testing Recent Updates function
