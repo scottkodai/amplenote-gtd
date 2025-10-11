@@ -37,6 +37,19 @@
       this._lastTaskCacheUpdate = null;
     },
 
+    // Update cache entries in-place when tags are added
+    updateCacheWithTag: function(noteUUID, tag) {
+      if (!this._noteCache) return;
+      
+      const noteIndex = this._noteCache.findIndex(note => note.uuid === noteUUID);
+      if (noteIndex >= 0) {
+        // Add the new tag to the cached note
+        if (!this._noteCache[noteIndex].tags.includes(tag)) {
+          this._noteCache[noteIndex].tags.push(tag);
+        }
+      }
+    },
+
     // Method to explicitly refresh caches
     refreshCaches: async function(app, options = {}) {
       const { notes = true, tasks = true } = options;
@@ -538,14 +551,27 @@
       // Project relationships should always be one-way
       if (noteType === 'project') {
         // Project notes have one-way relationship TO other notes (project → related)
-        await note.addTag(`r/${relatedType}/${relatedNoteId}`);
+        const tag = `r/${relatedType}/${relatedNoteId}`;
+        await note.addTag(tag);
+        // Update the note in the cache to include the new tag
+        plugin.updateCacheWithTag(note.uuid, tag);
       } else if (relatedType === 'project') {
         // Other notes have one-way relationship FROM project notes (project → related)
-        await relatedNote.addTag(`r/${noteType}/${noteId}`);
+        const tag = `r/${noteType}/${noteId}`;
+        await relatedNote.addTag(tag);
+        // Update the related note in the cache
+        plugin.updateCacheWithTag(relatedNote.uuid, tag);
       } else {
         // Non-project relationships are two-way
-        await note.addTag(`r/${relatedType}/${relatedNoteId}`);
-        await relatedNote.addTag(`r/${noteType}/${noteId}`);
+        const noteTag = `r/${relatedType}/${relatedNoteId}`;
+        const relatedTag = `r/${noteType}/${noteId}`;
+        
+        await note.addTag(noteTag);
+        await relatedNote.addTag(relatedTag);
+        
+        // Update both notes in the cache
+        plugin.updateCacheWithTag(note.uuid, noteTag);
+        plugin.updateCacheWithTag(relatedNote.uuid, relatedTag);
       }
     }, // end addRelationshipByType
 
