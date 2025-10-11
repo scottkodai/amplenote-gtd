@@ -2295,60 +2295,14 @@
         await this.clearAllTags(app, noteUUID);
       }, // end Clear Tags
 
+/*    
       // ===============================================================================================
-      // One time project relationaship fix for two-way relationship bug
+      // Test noteOption Function
       // ===============================================================================================
-      "Project Relationship Cleanup": async function(app) {
-        const plugin = this;
-        // Invalidate the cache to ensure we're working with fresh data
-        await plugin.invalidateNoteCache();
-
-        let allNotes = await plugin._getCachedNotes(app);
-        let modified = 0;
-        let details = [];
-        
-        // Find any note with an r/project/* tag - these should not exist
-        const notesWithProjectTags = allNotes.filter(n => 
-          n.tags.some(t => t.startsWith('r/project/'))
-        );
-        
-        details.push(`Found ${notesWithProjectTags.length} notes with incorrect r/project/* tags`);
-        
-        // Remove all r/project/* tags
-        for (const note of notesWithProjectTags) {
-          const projectTags = note.tags.filter(t => t.startsWith('r/project/'));
-          
-          for (const tag of projectTags) {
-            //await note.removeTag(tag);
-            await app.removeNoteTag(note.uuid, tag);
-            modified++;
-            details.push(`- Removed tag "${tag}" from "${note.name}"`);
-          }
-        }
-        
-        details.push(`\nTotal: Removed ${modified} incorrect r/project/* tags`);
-        
-        // Write results to the dedicated cleanup note
-        const summary = details.join('\n');
-        
-        // Try to find the dedicated cleanup note first
-        let cleanupNote = await app.findNote({ name: 'Project Relationship Cleanup' });
-        
-        if (!cleanupNote) {
-          // Create the note if it doesn't exist
-          cleanupNote = await app.notes.create({
-            name: "Project Relationship Cleanup",
-            content: summary
-          });
-        } else {
-          // Append to the note if it exists (preserving existing content)
-          const existingContent = await app.getNoteContent(cleanupNote.uuid);
-          const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-          const updatedContent = `${existingContent}\n\n## Cleanup Run - ${timestamp}\n${summary}`;
-          await app.replaceNoteContent(cleanupNote.uuid, updatedContent);
-        }        
-        await app.alert(`✅ Cleanup complete. Removed ${modified} incorrect tags. Details written to "Project Relationship Cleanup" note.`);
-      }, // end Project Relationship Cleanup
+      "Test noteOption Function": async function(app) {
+        await app.alert("This is a test of the noteOption function wrapper");
+      }, // end Test noteOption Function
+*/
 
       // ===============================================================================================
       // Testing Recent Updates function
