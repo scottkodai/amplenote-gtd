@@ -2320,6 +2320,7 @@
           
           for (const tag of projectTags) {
             //await note.removeTag(tag);
+            await app.removeNoteTag(note.uuid, tag);
             modified++;
             details.push(`- Removed tag "${tag}" from "${note.name}"`);
           }
