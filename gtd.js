@@ -1615,7 +1615,10 @@
         if (!setupResult) return;
 
         const [domainTag, noteType] = setupResult;
-        if (domainTag) await note.addTag(domainTag);
+        if (domainTag) {
+          await note.addTag(domainTag);
+          plugin.updateCacheWithTag(note.uuid, domainTag);
+        }
 
         let typeTag = '',
           templateName = '';
@@ -1642,7 +1645,10 @@
             break;
         }
 
-        if (typeTag) await note.addTag(typeTag);
+        if (typeTag) {
+          await note.addTag(typeTag);
+          plugin.updateCacheWithTag(note.uuid, typeTag);
+        }
 
         if (templateName) {
           const templateNote = await app.findNote({ name: templateName });
@@ -1823,14 +1829,20 @@
       // Project status
       if (isProjectNote && projectStatusValue) {
         const oldStatus = note.tags.find((t) => t.startsWith('project/'));
-        if (oldStatus) await note.removeTag(oldStatus);
+        if (oldStatus) {
+          await note.removeTag(oldStatus);
+          this.removeCacheTag(noteUUID, oldStatus);
+        }
 
         if (projectStatusValue === 'project/completed') {
           const now = new Date();
           const datestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-          await note.addTag(`project/completed/${datestamp}`);
+          const newTag = `project/completed/${datestamp}`;
+          await note.addTag(newTag);
+          plugin.updateCacheWithTag(noteUUID, newTag);
         } else {
           await note.addTag(projectStatusValue);
+          plugin.updateCacheWithTag(noteUUID, projectStatusValue);
         }
       }
 
@@ -1847,22 +1859,34 @@
       // People category
       if (peopleCategoryValue) {
         const old = note.tags.find((t) => t.startsWith('reference/people/'));
-        if (old) await note.removeTag(old);
+        if (old) {
+          await note.removeTag(old);
+          this.removeCacheTag(noteUUID, old);
+        }
         await note.addTag(peopleCategoryValue);
+        plugin.updateCacheWithTag(noteUUID, peopleCategoryValue);
       }
 
       // Software category
       if (softwareCategoryValue) {
         const old = note.tags.find((t) => t.startsWith('reference/software/'));
-        if (old) await note.removeTag(old);
+        if (old) {
+          await note.removeTag(old);
+          this.removeCacheTag(noteUUID, old);
+        }
         await note.addTag(softwareCategoryValue);
+        plugin.updateCacheWithTag(noteUUID, softwareCategoryValue);
       }
 
       // Horizon category
       if (horizonCategoryValue) {
         const old = note.tags.find((t) => t.startsWith('reference/horizon/'));
-        if (old) await note.removeTag(old);
+        if (old) {
+          await note.removeTag(old);
+          this.removeCacheTag(noteUUID, old);
+        }
         await note.addTag(horizonCategoryValue);
+        plugin.updateCacheWithTag(noteUUID, horizonCategoryValue);
       }
 
       // Reference category
@@ -1874,8 +1898,12 @@
             !t.startsWith('reference/software/') &&
             !t.startsWith('reference/horizon/'),
         );
-        if (old) await note.removeTag(old);
+        if (old) {
+          await note.removeTag(old);
+          this.removeCacheTag(noteUUID, old);
+        }
         await note.addTag(referenceCategoryValue);
+        plugin.updateCacheWithTag(noteUUID, referenceCategoryValue);
       }
 
       // Relationships
@@ -1914,9 +1942,10 @@
 
       for (const tag of note.tags) {
         await note.removeTag(tag);
+        this.removeCacheTag(noteUUID, tag);
       }
 
-      await app.alert(`✅ Cleared ${note.tags.length} tags from "${note.name}"`);
+      // await app.alert(`✅ Cleared ${note.tags.length} tags from "${note.name}"`);
     }, // end clearAllTags
 
     // ===============================================================================================
