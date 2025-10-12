@@ -13,6 +13,8 @@
     _taskCache: null,
     _lastNoteCacheUpdate: null,
     _lastTaskCacheUpdate: null,
+
+/* // Removed TTL-based expiration to keep cache for tab lifetime
     _cacheTTL: 15 * 60 * 1000, // 15 minutes in milliseconds
 
     // Cache validation functions
@@ -25,7 +27,7 @@
       if (!this._lastTaskCacheUpdate) return false;
       return (Date.now() - this._lastTaskCacheUpdate) < this._cacheTTL;
     },
-
+*/
     // Explicit cache invalidation methods
     invalidateNoteCache: function() {
       this._noteCache = null;
@@ -50,6 +52,17 @@
       }
     },
 
+    // Update cache entries in-place when tags are removed
+    removeCacheTag: function(noteUUID, tag) {
+      if (!this._noteCache) return;
+      
+      const noteIndex = this._noteCache.findIndex(note => note.uuid === noteUUID);
+      if (noteIndex >= 0) {
+        this._noteCache[noteIndex].tags = 
+          this._noteCache[noteIndex].tags.filter(t => t !== tag);
+      }
+    },
+
     // Method to explicitly refresh caches
     refreshCaches: async function(app, options = {}) {
       const { notes = true, tasks = true } = options;
@@ -65,8 +78,8 @@
 
     // Get filtered notes with caching
     _getCachedNotes: async function(app, baseTag = '', domainTags = []) {
-      // If cache is invalid or doesn't exist, refresh it
-      if (!this._isNoteCacheValid() || !this._noteCache) {
+      // If cache doesn't exist, refresh it
+      if (!this._noteCache) {
         const notes = await app.filterNotes({ tag: '^archive,^exclude' });
         this._noteCache = notes;
         this._lastNoteCacheUpdate = Date.now();
@@ -103,7 +116,7 @@
     // Get cached tasks (now independent of note cache)
     _getCachedTasks: async function(app, baseTag = '', domainTags = []) {
       // If no task cache exists or cache is invalid
-      if (!this._isTaskCacheValid() || !this._taskCache) {
+      if (!this._taskCache) {
         const notes = await this._getCachedNotes(app, baseTag, domainTags);
         const allTasks = [];
         
@@ -120,6 +133,15 @@
       }
       
       return this._taskCache;
+    },
+
+    // Add note to cache on new note creation
+    onNoteCreated: async function(app, noteUUID) {
+      const note = await app.notes.find(noteUUID);
+      if (!this._noteCache) return;
+      
+      // Add the new note to the cache
+      this._noteCache.push(note);
     },
     //#endregion
     
@@ -304,7 +326,7 @@
     // ===============================================================================================
     getAllTasks: async function (app, baseTag = '', domainTags = []) {
       // If no task cache exists or cache is invalid
-      if (!this._isTaskCacheValid() || !this._taskCache) {
+      if (!this._taskCache) {
         const notes = await this._getCachedNotes(app, baseTag, domainTags);
         const allTasks = [];
         
