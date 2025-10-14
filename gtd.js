@@ -64,16 +64,11 @@
     },
 
     // Method to explicitly refresh caches
-    refreshCaches: async function(app, options = {}) {
-      const { notes = true, tasks = true } = options;
-      
-      if (notes) {
-        await this._getCachedNotes(app);
-      }
-      
-      if (tasks) {
-        await this._getCachedTasks(app);
-      }
+    refreshNoteCache: async function(app) {
+      // Invalidate any existing cache
+      plugin.invalidateNoteCache();
+      // Fetch fresh notes and repopulate cache
+      await this._getCachedNotes(app);      
     },
 
     // Get filtered notes with caching
@@ -2261,6 +2256,13 @@
             `Total items updated: ${totalItems}`,
         );
       }, // end Update All Lists
+      // =============================================================================================
+      // Refresh Note Cache
+      // Quick way to refresh the note cache used by various functions
+      // =============================================================================================
+      'Refresh Note Cache': async function (app) {
+        await this.refreshNoteCache(app);
+      }, // end Refresh Note Cache
     }, // end appOption
     //#endregion
 
