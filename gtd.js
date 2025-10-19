@@ -216,7 +216,7 @@
           t.startsWith('list/') ||
           t.startsWith('project/') ||
           t.startsWith('reference/') ||
-          ['people', 'software', 'vendor', 'horizon'].includes(t),
+          ['people', 'software', 'horizon'].includes(t),
       );
       if (!tag) return null;
 
@@ -226,7 +226,7 @@
 
       if (tag.startsWith('reference/')) {
         const subtype = tag.split('/')[1];
-        if (['people', 'software', 'vendor', 'horizon'].includes(subtype)) {
+        if (['people', 'software', 'horizon'].includes(subtype)) {
           return subtype; // drop the "reference/" for r/ tags
         }
       }
@@ -948,6 +948,7 @@
         { name: 'Related People', fn: this.updateRelatedPeopleSection },
         { name: 'Related References', fn: this.updateRelatedReferencesSection },
         { name: 'Related Software', fn: this.updateRelatedSoftwareSection },
+        { name: 'Related Horizons', fn: this.updateRelatedHorizonsSection },
         { name: 'Parent Notes', fn: this.updateParentNotesSection },
         { name: 'Child Notes', fn: this.updateChildNotesSection },
       ];
@@ -1347,6 +1348,53 @@
 
       return { updated: true, count: relatedSoftware.length };
     }, // end updateRelatedSoftwareSection
+
+    // ===============================================================================================
+    // Updates any existing Related Horizons section with links to all related horizons
+    // Called from: updateAllRelatedSections
+    // ===============================================================================================
+    updateRelatedHorizonsSection: async function (app, noteUUID, domainTags = []) {
+      const sectionHeading = 'Related Horizons';
+
+      const sections = await app.getNoteSections({ uuid: noteUUID });
+      const targetSection = sections.find(
+        (s) => s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase(),
+      );
+      if (!targetSection) return { updated: false, count: 0 };
+
+      const note = await app.notes.find(noteUUID);
+      const horizonTags = note.tags.filter((t) => t.startsWith('r/horizon/'));
+      if (horizonTags.length === 0) {
+        await app.replaceNoteContent(noteUUID, '_(No related horizons)_', {
+          section: { heading: { text: sectionHeading, index: targetSection.heading.index } },
+        });
+        return { updated: true, count: 0 };
+      }
+
+      const relatedHorizons = [];
+      for (const tag of horizonTags) {
+        const noteId = tag.split('/')[2];
+
+        // Use helper to get matches, filtered by domain/exclusions
+        let matches = await this.getFilteredNotes(app, `note-id/${noteId}`, domainTags);
+
+        if (matches.length > 0) {
+          relatedHorizons.push(this.normalizeNoteHandle(matches[0]));
+        }
+      }
+
+      relatedHorizons.sort((a, b) => a.name.localeCompare(b.name));
+
+      const horizonList = relatedHorizons.length
+        ? relatedHorizons.map((n) => `- [${n.name}](${n.url})`).join('\n')
+        : '_(No related horizons)_';
+
+      await app.replaceNoteContent(noteUUID, horizonList, {
+        section: { heading: { text: sectionHeading } },
+      });
+
+      return { updated: true, count: relatedHorizons.length };
+    }, // end updateRelatedHorizonsSection
 
     // ===============================================================================================
     // Updates any existing Parent Projects section with links to all parent projects
@@ -2038,6 +2086,7 @@
       const uncategorizedTags = [
         'reference/uncategorized',
         'reference/people/uncategorized',
+        'reference/horizon/uncategorized',
         'reference/software/uncategorized',
       ];
 
