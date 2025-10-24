@@ -2170,7 +2170,7 @@
     // set categories on people, software, and reference notes
     // ===============================================================================================
     updateSystemCategories: async function (app) {
-      //const plugin = this;
+      const plugin = this;
 
       /**
        * Extracts all unique subtags from reference notes,
@@ -2181,7 +2181,7 @@
        * @returns {Promise<string[]>} - Sorted list of category paths
        */
       async function getReferenceCategories(baseTag, excludeFirstLevel = []) {
-        const notes = await this._getCachedNotes(app, baseTag);
+        const notes = await plugin._getCachedNotes(app, baseTag);
         const categories = new Set();
 
         for (let note of notes) {
