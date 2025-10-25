@@ -477,9 +477,11 @@
       const parentIdTag = await plugin.getNoteIdTag(app, parent);
       const parentId = parentIdTag.split('/')[1];
 
-      // 5. Add tags for parent/child relationship
+      // 5. Add tags for parent/child relationship and update cache
       await child.addTag(`r/parent/${parentId}`);
+      plugin.updateCacheWithTag(child.uuid, `r/parent/${parentId}`);
       await parent.addTag(`r/child/${childId}`);
+      plugin.updateCacheWithTag(parent.uuid, `r/child/${childId}`);
     }, // end setParentChildRelationship
 
     // ===============================================================
@@ -607,10 +609,14 @@
 
       if (relation.type === 'parent') {
         await note.removeTag(`r/parent/${targetId}`);
+        plugin.removeCacheTag(note.uuid, `r/parent/${targetId}`);
         await target.removeTag(`r/child/${noteId}`);
+        plugin.removeCacheTag(target.uuid, `r/child/${noteId}`);
       } else if (relation.type === 'child') {
         await note.removeTag(`r/child/${targetId}`);
+        plugin.removeCacheTag(note.uuid, `r/child/${targetId}`);
         await target.removeTag(`r/parent/${noteId}`);
+        plugin.removeCacheTag(target.uuid, `r/parent/${noteId}`);
       } else {
         const noteType = plugin.getNoteType(note);
         const targetType = plugin.getNoteType(target);
@@ -619,13 +625,17 @@
         if (noteType === 'project') {
           // Only the project note has the tag
           await note.removeTag(`r/${targetType}/${targetId}`);
+          plugin.removeCacheTag(note.uuid, `r/${targetType}/${targetId}`);
         } else if (targetType === 'project') {
           // Only the target project note has the tag
           await target.removeTag(`r/${noteType}/${noteId}`);
+          plugin.removeCacheTag(target.uuid, `r/${noteType}/${noteId}`);
         } else {
           // Standard two-way relationship cleanup
           await note.removeTag(`r/${targetType}/${targetId}`);
+          plugin.removeCacheTag(note.uuid, `r/${targetType}/${targetId}`);
           await target.removeTag(`r/${noteType}/${noteId}`);
+          plugin.removeCacheTag(target.uuid, `r/${noteType}/${noteId}`);
         }
       }
     }, // end removeRelationship
