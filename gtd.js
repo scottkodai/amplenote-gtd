@@ -967,7 +967,11 @@
       let totalCount = 0;
 
       for (const section of staticSections) {
-        const result = await section.fn.call(this, app, noteUUID, domainTags);
+        // Recent Updates doesn't need domainTags parameter
+        const result = section.name === "Recent Updates"
+          ? await section.fn.call(this, app, noteUUID)
+          : await section.fn.call(this, app, noteUUID, domainTags);
+
         if (result && result.updated) {
           totalUpdated++;
           totalCount += result.count || 0;
@@ -981,12 +985,17 @@
     // Updates any existing Recent Updates section with backlinks from recent Daily Jots
     // Called from:
     // ===============================================================================================
-    updateRecentUpdatesSection: async function (app, noteUUID) {
+    updateRecentUpdatesSection: async function (app, noteUUID, maxEntries = 3) {
       const sectionHeading = 'Recent Updates';
 
-      // Utility to remove ordinal suffixes from day numbers in Jot names
-      function cleanDateString(dateStr) {
-        return dateStr.replace(/(\d+)(st|nd|rd|th)/, '$1');
+      // Helper function to parse date from jot title (e.g., "October 25th, 2025")
+      function parseDateFromJotTitle(title) {
+        // Remove ordinal suffixes (st, nd, rd, th) from the day
+        const cleanedTitle = title.replace(/(\d+)(st|nd|rd|th)/, '$1');
+        const parsedDate = new Date(cleanedTitle);
+        
+        // Return timestamp, or 0 if invalid
+        return isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime();
       }
 
       // 1. Find the section (don't add if it doesn't exist)
@@ -999,61 +1008,157 @@
       // 1. Get all noteHandles that reference this project note
       const backlinks = await app.getNoteBacklinks({ uuid: noteUUID });
 
-      // 2. Filter to only those tagged with 'daily-jots'
-      const jots = backlinks.filter((n) => n.tags.includes('daily-jots'));
+      if (!backlinks || backlinks.length === 0) {
+        // Clear section if there are no backlinks
+        await app.replaceNoteContent(noteUUID, '_No recent updates_', {
+          section: { heading: { text: sectionHeading } },
+        });
+        return { updated: true, count: 0 };
+      }
 
-      // 3. Limit to jots from the last 14 days
-      const lookBackDate = new Date();
-      lookBackDate.setDate(lookBackDate.getDate() - 14);
-
-      // 4. Need to filter jots for those with titles greater than 14 daya ago
-      const recentJots = jots
-        .map((jot) => {
-          const cleaned = cleanDateString(jot.name);
-          const parsedDate = new Date(cleaned);
-          return { jot, parsedDate };
-        })
-        .filter(({ parsedDate }) => !isNaN(parsedDate) && parsedDate >= lookBackDate)
-        .sort((a, b) => b.parsedDate - a.parsedDate) // most recent first
-        .map(({ jot }) => jot); // unwrap original jot object
-
-      // await app.alert(JSON.stringify(recentJots));
-
-      // 5. Iterate through recentJots and pull out context and contents
       const targetNoteHandle = { uuid: noteUUID };
+      const processedJots = [];
+
+      // 2. For each backlink, fetch backlink contents and full jot handle
+      for (const jotHandle of backlinks) {
+        try {
+          const fullJot = (await app.notes.find(jotHandle.uuid)) || jotHandle;
+          // Only process backlinks from daily jot notes
+          if (!fullJot.tags || !fullJot.tags.includes('daily-jots')) {
+            continue; // Skip this backlink if it's not a daily jot
+          }
+          
+          const backlinkContents = await app.getNoteBacklinkContents(targetNoteHandle, jotHandle);
+
+          // Filter out link-only backlinks (no sub-bullets / context)
+          const meaningfulContents = backlinkContents.filter((content) => {
+            const isEmptyLinkOnly = content
+              .trim()
+              .match(/^\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)$/i);
+            return !isEmptyLinkOnly && content.trim() !== '';
+          });
+
+          if (meaningfulContents.length > 0) {
+            // Parse the date from the jot title instead of using updated timestamp
+            const jotDate = parseDateFromJotTitle(fullJot.name);
+            
+            processedJots.push({
+              jot: fullJot,
+              contents: meaningfulContents,
+              updatedAt: jotDate, // Now based on jot title, not modified time
+            });
+          }
+        } catch (e) {
+          // ignore individual failures
+          continue;
+        }
+      }
+
+      if (processedJots.length === 0) {
+        await app.replaceNoteContent(noteUUID, '_No recent updates_', {
+          section: { heading: { text: sectionHeading } },
+        });
+        return { updated: true, count: 0 };
+      }
+
+      // 3. Sort by updated time desc and take the most recent N jots
+      processedJots.sort((a, b) => b.updatedAt - a.updatedAt);
+      const recent = processedJots.slice(0, maxEntries);
+
+      // 4. Iterate through recent jots and pull out context and contents
       let footnoteCounter = 1;
-
       const updates = [];
-      for (const jot of recentJots) {
-        const sourceNoteHandle = jot;
-        const backlinkContents = await app.getNoteBacklinkContents(
-          targetNoteHandle,
-          sourceNoteHandle,
-        );
 
-        // if there isn't any backlink content, skip
-        if (backlinkContents.length === 0) continue;
-
+      for (const entry of recent) {
+        const jot = entry.jot;
         // Normalize the Jot name and url
         const jotLink = this.normalizeNoteHandle(jot);
 
-        // Append each backlink with date + content
-        backlinkContents.forEach((content) => {
-          // skip if this is just a plain link (no sub-bullets)
-          const isEmptyLinkOnly = content
-            .trim()
-            .match(/^\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)$/i);
-          if (isEmptyLinkOnly) return;
+        // Load sections for the source jot once (used to extract heading/context)
+        let sourceSections = [];
+        try {
+          sourceSections = await app.getNoteSections({ uuid: jot.uuid });
+        } catch (e) {
+          sourceSections = [];
+        }
+
+        for (const rawContent of entry.contents) {
           // strip out any embedded comments that might affect indentation
-          const cleanedContent = this.stripAmplenoteIndentComments(content);
+          const cleanedContent = this.stripAmplenoteIndentComments(rawContent);
+
+          // Try to find the section that contains this backlink or at least the note link
+          let foundSection = sourceSections.find((s) => s.content && s.content.includes(cleanedContent));
+
+          if (!foundSection) {
+            // fallback: find a section that contains the note url or name
+            foundSection = sourceSections.find(
+              (s) =>
+                s.content &&
+                (s.content.includes(jotLink.url) || s.content.includes(jot.name) || s.content.includes(noteUUID)),
+            );
+          }
+
+          const sectionHeadingText = (foundSection && foundSection.heading && foundSection.heading.text) || '';
+
+          // Attempt to extract context (section heading and parent bullet if nested)
+          let parentLabel = '';
+          if (foundSection && foundSection.content) {
+            const lines = foundSection.content.split('\n');
+            // Find the line that contains the note link (url or name or uuid)
+            const linkLineIndex = lines.findIndex((l) =>
+              l.includes(jotLink.url) || l.includes(jot.name) || l.includes(noteUUID),
+            );
+
+            const linkLine = linkLineIndex >= 0 ? lines[linkLineIndex] : null;
+
+            if (linkLine) {
+              // Calculate the indentation level of the link line
+              const linkIndent = linkLine.match(/^\s*/)[0].length;
+
+              // Check if there's any text after the link on the same line
+              const textAfterLink = linkLine
+                .replace(/\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)/i, '')
+                .replace(/^\s*[-*]\s*/, '')
+                .trim();
+
+              if (textAfterLink) {
+                // If there's text on the same line as the link, use it as context
+                parentLabel = textAfterLink;
+              } else if (linkIndent > 0) {
+                // Only search upward if the link is indented (not a top-level bullet)
+                for (let i = linkLineIndex - 1; i >= 0; i--) {
+                  const candidate = lines[i].trim();
+                  if (candidate === '') continue;
+                  
+                  const candidateIndent = lines[i].match(/^\s*/)[0].length;
+                  
+                  // Stop if we find a bullet with less indentation (parent level)
+                  if (candidateIndent < linkIndent) {
+                    const m = candidate.match(/^\s*[-*]\s*(.+)/);
+                    if (m && m[1]) {
+                      // Remove any markdown links from the parent bullet text
+                      parentLabel = m[1]
+                        .replace(/\[.*?\]\(.*?\)/g, '')
+                        .replace(/\[.*?\]\[.*?\]/g, '')
+                        .trim();
+                      break;
+                    }
+                  }
+                }
+              }
+              // If linkIndent === 0 and no textAfterLink, parentLabel stays empty (top-level bullet)
+            }
+          }
+
+          const contextParts = [];
+          if (sectionHeadingText) contextParts.push(sectionHeadingText);
+          if (parentLabel) contextParts.push(parentLabel);
+          const context = contextParts.join(' — '); // e.g., "Meetings" or "Meetings — Team A"
+
           // uniquify any footnotes so they don't conflict
-          const { updatedContent, nextCounter } = this.uniquifyFootnotes(
-            cleanedContent,
-            footnoteCounter,
-          );
+          const { updatedContent, nextCounter } = this.uniquifyFootnotes(cleanedContent, footnoteCounter);
           footnoteCounter = nextCounter;
 
-          //await app.alert("updatedContent:\n" + updatedContent);
           // Adjust indentation to align with top level bullets
           const indentedContent = this.normalizeIndentationForSubtree(updatedContent);
 
@@ -1061,19 +1166,25 @@
             name: jotLink.name,
             noteURL: jotLink.url,
             markdown: indentedContent,
+            context,
           });
-        });
+        }
       }
 
-      // 6. Build markdown for output
+      // 5. Build markdown for output. Keep the daily-jot link, prepend context if available.
       const markdown = updates
-        .map((u) => `- [${u.name}](${u.noteURL})\n${u.markdown}`)
+        .map((u) => {
+          const heading = u.context ? ` — ${u.context}` : '';
+          return `- [${u.name}](${u.noteURL})${heading}\n${u.markdown}`;
+        })
         .join('\n\n');
 
-      // 7. Replace section content
-      await app.replaceNoteContent(noteUUID, markdown, {
+      // 6. Replace section content
+      await app.replaceNoteContent(noteUUID, markdown || '_No recent updates_', {
         section: { heading: { text: sectionHeading } },
       });
+
+      return { updated: true, count: updates.length };
     }, //end updateRecentUpdatesSection
 
     // ===============================================================================================
@@ -2451,7 +2562,7 @@
         // Detect any domain tags (d/work, d/home, etc.)
         const domainTags = note.tags.filter((t) => t.startsWith('d/'));
 
-        await this.updateRecentUpdatesSection(app, noteUUID, domainTags);
+        await this.updateRecentUpdatesSection(app, noteUUID, 3);
       }, // end Test Recent Updates
       // ===============================================================================================
       // Collects deadline tasks to display on the daily jot
