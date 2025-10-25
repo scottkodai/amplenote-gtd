@@ -1175,7 +1175,21 @@
       const markdown = updates
         .map((u) => {
           const heading = u.context ? ` — ${u.context}` : '';
-          return `- [${u.name}](${u.noteURL})${heading}\n${u.markdown}`;
+          
+          // Remove the note link line from the markdown content since we're adding it to the heading
+          const contentLines = u.markdown.split('\n');
+          const filteredLines = contentLines.filter(line => {
+            // Skip lines that are just the note link
+            const isNoteLinkOnly = line.trim().match(/^[-*]\s*\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)\s*$/i);
+            return !isNoteLinkOnly;
+          });
+          
+          // Dedent the remaining content by one level since we removed the parent bullet
+          const dedentedContent = filteredLines
+            .map(line => line.replace(/^    /, '')) // Remove one level of indent
+            .join('\n');
+          
+          return `- [${u.name}](${u.noteURL})${heading}\n${dedentedContent}`;
         })
         .join('\n\n');
 
