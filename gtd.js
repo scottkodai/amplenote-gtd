@@ -2599,6 +2599,7 @@
       }, // end Test noteOption Function
 */
 
+/* Commenting out Refresh Deadline Tasks for now since it's not being used
       // ===============================================================================================
       // Collects deadline tasks to display on the daily jot
       // ===============================================================================================
@@ -2645,6 +2646,7 @@
           section: { heading: { text: 'Deadline Tasks' } },
         });
       }, // end Refresh Deadline Tasks
+*/ // end commenting out of Refresh Deadline Tasks
     }, // end noteOption
     //#endregion
   }; // end plugin object
