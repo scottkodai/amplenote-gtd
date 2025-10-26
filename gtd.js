@@ -1212,9 +1212,16 @@
           
           if (u.context) {
             output += `    - ${u.context}\n`;
+            // Add extra indentation (4 spaces) to all content lines
+            const indentedContent = contentToInclude
+              .split('\n')
+              .map(line => line ? `    ${line}` : line)
+              .join('\n');
+            output += indentedContent;
+          } else {
+            // No context, keep content at original indentation
+            output += contentToInclude;
           }
-          
-          output += contentToInclude;
           
           return output;
         })
