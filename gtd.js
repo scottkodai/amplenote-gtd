@@ -1118,8 +1118,8 @@
             }
           }
 
-          // Attempt to extract context (parent bullet) from the full jot content
-          let parentLabel = '';
+          // Attempt to extract context (parent bullets) from the full jot content
+          let parentLabels = [];
 
           // Find the line in the full jot content that contains the note link
           const fullJotLines = fullJotContent.split('\n');
@@ -1141,30 +1141,40 @@
 
             if (textAfterLink) {
               // If there's text on the same line as the link, use it as context
-              parentLabel = textAfterLink;
+              parentLabels.push(textAfterLink);
             } else if (linkIndent > 0) {
-              // Only search upward if the link is indented (not a top-level bullet)
+              // Search upward to collect all ancestor bullets
+              let currentIndent = linkIndent;
+
               for (let i = linkLineIndex - 1; i >= 0; i--) {
                 const candidate = fullJotLines[i].trim();
                 if (candidate === '') continue;
                 
                 const candidateIndent = fullJotLines[i].match(/^\s*/)[0].length;
                 
-                // Stop if we find a bullet with less indentation (parent level)
-                if (candidateIndent < linkIndent) {
+                // Look for bullets with less indentation than current level
+                if (candidateIndent < currentIndent) {
                   const m = candidate.match(/^\s*[-*]\s*(.+)/);
                   if (m && m[1]) {
-                    parentLabel = m[1].trim();
-                    break;
+                    // Add this ancestor to the front of the array (so we build from top down)
+                    parentLabels.unshift(m[1].trim());
+                    // Update current indent to continue searching for grandparents
+                    currentIndent = candidateIndent;
+                    
+                    // Stop if we've reached a top-level bullet (no indentation)
+                    if (candidateIndent === 0) break;
                   }
                 }
               }
             }
           }
-          
+
           const contextParts = [];
           if (sectionHeadingText) contextParts.push(sectionHeadingText);
-          if (parentLabel) contextParts.push(parentLabel);
+          // Join all parent labels with a " — " separator
+          if (parentLabels.length > 0) {
+            contextParts.push(parentLabels.join(' — '));
+          }
           const context = contextParts.join(' — ');
 
           // uniquify any footnotes so they don't conflict
