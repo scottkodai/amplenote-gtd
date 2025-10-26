@@ -1069,88 +1069,103 @@
       let footnoteCounter = 1;
       const updates = [];
 
+      // Iterate through each recent jot (recent contains only the N most recent jots)
       for (const entry of recent) {
+        // load jot with the full noteHandle of the current backlink source
         const jot = entry.jot;
-        // Normalize the Jot name and url
+        // Normalize the Jot name and url and store in jotLink
         const jotLink = this.normalizeNoteHandle(jot);
 
         // Load sections for the source jot once (used to extract heading/context)
         let sourceSections = [];
+        let fullJotContent = '';
         try {
           sourceSections = await app.getNoteSections({ uuid: jot.uuid });
+          fullJotContent = await app.getNoteContent({ uuid: jot.uuid });
         } catch (e) {
           sourceSections = [];
         }
 
+        // Iterate through each backlink content from this jot
         for (const rawContent of entry.contents) {
           // strip out any embedded comments that might affect indentation
           const cleanedContent = this.stripAmplenoteIndentComments(rawContent);
 
-          // Try to find the section that contains this backlink or at least the note link
-          let foundSection = sourceSections.find((s) => s.content && s.content.includes(cleanedContent));
-
-          if (!foundSection) {
-            // fallback: find a section that contains the note url or name
-            foundSection = sourceSections.find(
-              (s) =>
-                s.content &&
-                (s.content.includes(jotLink.url) || s.content.includes(jot.name) || s.content.includes(noteUUID)),
-            );
+          // Extract the first line which should contain the note link
+          const firstLine = cleanedContent.split('\n')[0];
+          
+          // Try to find the section that contains this backlink by searching full jot content
+          let foundSection = null;
+          let sectionHeadingText = '';
+          
+          // Search through the full jot content to find which section contains our link
+          if (fullJotContent.includes(firstLine) || 
+              fullJotContent.includes(jotLink.url) || 
+              fullJotContent.includes(noteUUID)) {
+            
+            // Split jot content by heading markers to find which section we're in
+            const contentBeforeLink = fullJotContent.split(firstLine)[0];
+            
+            // Find the last heading before our content
+            for (const section of sourceSections) {
+              if (section.heading && section.heading.text) {
+                // Check if this heading appears before our link in the content
+                if (contentBeforeLink.includes(section.heading.text)) {
+                  foundSection = section;
+                  sectionHeadingText = section.heading.text;
+                }
+              }
+            }
           }
 
-          const sectionHeadingText = (foundSection && foundSection.heading && foundSection.heading.text) || '';
-
-          // Attempt to extract context (section heading and parent bullet if nested)
+          // Attempt to extract context (parent bullet) from the cleaned content itself
           let parentLabel = '';
-          if (foundSection && foundSection.content) {
-            const lines = foundSection.content.split('\n');
-            // Find the line that contains the note link (url or name or uuid)
-            const linkLineIndex = lines.findIndex((l) =>
-              l.includes(jotLink.url) || l.includes(jot.name) || l.includes(noteUUID),
-            );
+          const lines = cleanedContent.split('\n');
+          
+          // Find the line that contains the note link
+          const linkLineIndex = lines.findIndex((l) =>
+            l.includes(jotLink.url) || l.includes(jot.name) || l.includes(noteUUID),
+          );
 
-            const linkLine = linkLineIndex >= 0 ? lines[linkLineIndex] : null;
+          const linkLine = linkLineIndex >= 0 ? lines[linkLineIndex] : null;
 
-            if (linkLine) {
-              // Calculate the indentation level of the link line
-              const linkIndent = linkLine.match(/^\s*/)[0].length;
+          if (linkLine) {
+            // Calculate the indentation level of the link line
+            const linkIndent = linkLine.match(/^\s*/)[0].length;
 
-              // Check if there's any text after the link on the same line
-              const textAfterLink = linkLine
-                .replace(/\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)/i, '')
-                .replace(/^\s*[-*]\s*/, '')
-                .trim();
+            // Check if there's any text after the link on the same line
+            const textAfterLink = linkLine
+              .replace(/\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)/i, '')
+              .replace(/^\s*[-*]\s*/, '')
+              .trim();
 
-              if (textAfterLink) {
-                // If there's text on the same line as the link, use it as context
-                parentLabel = textAfterLink;
-              } else if (linkIndent > 0) {
-                // Only search upward if the link is indented (not a top-level bullet)
-                for (let i = linkLineIndex - 1; i >= 0; i--) {
-                  const candidate = lines[i].trim();
-                  if (candidate === '') continue;
-                  
-                  const candidateIndent = lines[i].match(/^\s*/)[0].length;
-                  
-                  // Stop if we find a bullet with less indentation (parent level)
-                  if (candidateIndent < linkIndent) {
-                    const m = candidate.match(/^\s*[-*]\s*(.+)/);
-                    if (m && m[1]) {
-                      // Remove any markdown links from the parent bullet text
-                      parentLabel = m[1].trim();
-                      break;
-                    }
+            if (textAfterLink) {
+              // If there's text on the same line as the link, use it as context
+              parentLabel = textAfterLink;
+            } else if (linkIndent > 0) {
+              // Only search upward if the link is indented (not a top-level bullet)
+              for (let i = linkLineIndex - 1; i >= 0; i--) {
+                const candidate = lines[i].trim();
+                if (candidate === '') continue;
+                
+                const candidateIndent = lines[i].match(/^\s*/)[0].length;
+                
+                // Stop if we find a bullet with less indentation (parent level)
+                if (candidateIndent < linkIndent) {
+                  const m = candidate.match(/^\s*[-*]\s*(.+)/);
+                  if (m && m[1]) {
+                    parentLabel = m[1].trim();
+                    break;
                   }
                 }
               }
-              // If linkIndent === 0 and no textAfterLink, parentLabel stays empty (top-level bullet)
             }
           }
 
           const contextParts = [];
           if (sectionHeadingText) contextParts.push(sectionHeadingText);
           if (parentLabel) contextParts.push(parentLabel);
-          const context = contextParts.join(' — '); // e.g., "Meetings" or "Meetings — Team A"
+          const context = contextParts.join(' — ');
 
           // uniquify any footnotes so they don't conflict
           const { updatedContent, nextCounter } = this.uniquifyFootnotes(cleanedContent, footnoteCounter);
@@ -1163,10 +1178,10 @@
             name: jotLink.name,
             noteURL: jotLink.url,
             markdown: indentedContent,
-            context,
+            context: context,
           });
-        }
-      }
+        } // end for (const rawContent of entry.contents)
+      } // end for (const entry of recent)
 
       // 5. Build markdown for output. Keep the daily-jot link, prepend context if available.
       const markdown = updates
