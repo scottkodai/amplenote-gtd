@@ -1138,8 +1138,7 @@
                     if (m && m[1]) {
                       // Remove any markdown links from the parent bullet text
                       parentLabel = m[1]
-                        .replace(/\[.*?\]\(.*?\)/g, '')
-                        .replace(/\[.*?\]\[.*?\]/g, '')
+                        .replace(/\[.*?\]\[.*?\]/g, '')  // Remove [text][ref] only
                         .trim();
                       break;
                     }
