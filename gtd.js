@@ -1176,20 +1176,18 @@
         .map((u) => {
           const heading = u.context ? ` — ${u.context}` : '';
           
-          // Remove the note link line from the markdown content since we're adding it to the heading
-          const contentLines = u.markdown.split('\n');
-          const filteredLines = contentLines.filter(line => {
-            // Skip lines that are just the note link
-            const isNoteLinkOnly = line.trim().match(/^[-*]\s*\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)\s*$/i);
-            return !isNoteLinkOnly;
-          });
+          // Remove the first line if it's just the note link (the backlinked note itself)
+          const lines = u.markdown.split('\n');
+          const firstLine = lines[0]?.trim();
           
-          // Dedent the remaining content by one level since we removed the parent bullet
-          const dedentedContent = filteredLines
-            .map(line => line.replace(/^    /, '')) // Remove one level of indent
-            .join('\n');
+          // Check if first line is a bullet with just the note link
+          const isNoteLinkLine = firstLine?.match(/^[-*]\s*\[.*?\]\(https:\/\/www\.amplenote\.com\/notes\/[a-z0-9-]+\)\s*$/i);
           
-          return `- [${u.name}](${u.noteURL})${heading}\n${dedentedContent}`;
+          const contentToInclude = isNoteLinkLine 
+            ? lines.slice(1).join('\n')  // Skip first line, keep rest as-is
+            : u.markdown;                 // Keep everything
+          
+          return `- [${u.name}](${u.noteURL})${heading}\n${contentToInclude}`;
         })
         .join('\n\n');
 
@@ -2571,12 +2569,9 @@
       // Testing Recent Updates function
       // ===============================================================================================
       'Test Recent Updates': async function (app, noteUUID) {
-        const note = await app.notes.find(noteUUID);
-
-        // Detect any domain tags (d/work, d/home, etc.)
-        const domainTags = note.tags.filter((t) => t.startsWith('d/'));
 
         await this.updateRecentUpdatesSection(app, noteUUID, 3);
+
       }, // end Test Recent Updates
       // ===============================================================================================
       // Collects deadline tasks to display on the daily jot
