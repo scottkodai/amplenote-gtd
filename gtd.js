@@ -1137,9 +1137,7 @@
                     const m = candidate.match(/^\s*[-*]\s*(.+)/);
                     if (m && m[1]) {
                       // Remove any markdown links from the parent bullet text
-                      parentLabel = m[1]
-                        .replace(/\[.*?\]\[.*?\]/g, '')  // Remove [text][ref] only
-                        .trim();
+                      parentLabel = m[1].trim();
                       break;
                     }
                   }
