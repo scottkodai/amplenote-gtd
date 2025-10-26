@@ -1,4 +1,4 @@
-// eslint.config.js
+// eslint.config.cjs
 
 import js from '@eslint/js';
 import importPlugin from 'eslint-plugin-import';
@@ -23,7 +23,10 @@ export default [
       prettier: prettierPlugin,
     },
     rules: {
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', {
+         argsIgnorePattern: '^_',
+         varsIgnorePattern: '^_'
+        }],
       'import/no-unresolved': 'off',
       'prettier/prettier': 'warn',
     },

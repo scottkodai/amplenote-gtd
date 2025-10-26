@@ -952,7 +952,7 @@
     // ===============================================================================================
     updateAllRelatedSections: async function (app, noteUUID, domainTags = []) {
       const staticSections = [
-        //{ name: "Recent Updates", fn: this.updateRecentUpdatesSection },
+        { name: "Recent Updates", fn: this.updateRecentUpdatesSection },
         { name: 'Related Tasks', fn: this.updateRelatedTasksSection },
         { name: 'Related Projects', fn: this.updateRelatedProjectsSection },
         { name: 'Related People', fn: this.updateRelatedPeopleSection },
@@ -1048,7 +1048,7 @@
               updatedAt: jotDate, // Now based on jot title, not modified time
             });
           }
-        } catch (e) {
+        } catch (_e) {
           // ignore individual failures
           continue;
         }
@@ -1082,7 +1082,7 @@
         try {
           sourceSections = await app.getNoteSections({ uuid: jot.uuid });
           fullJotContent = await app.getNoteContent({ uuid: jot.uuid });
-        } catch (e) {
+        } catch (_e) {
           sourceSections = [];
         }
 
@@ -1095,7 +1095,6 @@
           const firstLine = cleanedContent.split('\n')[0];
           
           // Try to find the section that contains this backlink by searching full jot content
-          let foundSection = null;
           let sectionHeadingText = '';
           
           // Search through the full jot content to find which section contains our link
@@ -1111,7 +1110,6 @@
               if (section.heading && section.heading.text) {
                 // Check if this heading appears before our link in the content
                 if (contentBeforeLink.includes(section.heading.text)) {
-                  foundSection = section;
                   sectionHeadingText = section.heading.text;
                 }
               }
@@ -2601,14 +2599,6 @@
       }, // end Test noteOption Function
 */
 
-      // ===============================================================================================
-      // Testing Recent Updates function
-      // ===============================================================================================
-      'Test Recent Updates': async function (app, noteUUID) {
-
-        await this.updateRecentUpdatesSection(app, noteUUID, 3);
-
-      }, // end Test Recent Updates
       // ===============================================================================================
       // Collects deadline tasks to display on the daily jot
       // ===============================================================================================
