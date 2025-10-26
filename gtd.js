@@ -1174,8 +1174,6 @@
       // 5. Build markdown for output. Keep the daily-jot link, prepend context if available.
       const markdown = updates
         .map((u) => {
-          const heading = u.context ? ` — ${u.context}` : '';
-          
           // Remove the first line if it's just the note link (the backlinked note itself)
           const lines = u.markdown.split('\n');
           const firstLine = lines[0]?.trim();
@@ -1187,7 +1185,16 @@
             ? lines.slice(1).join('\n')  // Skip first line, keep rest as-is
             : u.markdown;                 // Keep everything
           
-          return `- [${u.name}](${u.noteURL})${heading}\n${contentToInclude}`;
+          // Build output with context as a bullet if present
+          let output = `- [${u.name}](${u.noteURL})\n`;
+          
+          if (u.context) {
+            output += `    - ${u.context}\n`;
+          }
+          
+          output += contentToInclude;
+          
+          return output;
         })
         .join('\n\n');
 
