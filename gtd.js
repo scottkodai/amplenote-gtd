@@ -1118,16 +1118,16 @@
             }
           }
 
-          // Attempt to extract context (parent bullet) from the cleaned content itself
+          // Attempt to extract context (parent bullet) from the full jot content
           let parentLabel = '';
-          const lines = cleanedContent.split('\n');
-          
-          // Find the line that contains the note link
-          const linkLineIndex = lines.findIndex((l) =>
+
+          // Find the line in the full jot content that contains the note link
+          const fullJotLines = fullJotContent.split('\n');
+          const linkLineIndex = fullJotLines.findIndex((l) =>
             l.includes(jotLink.url) || l.includes(jot.name) || l.includes(noteUUID),
           );
 
-          const linkLine = linkLineIndex >= 0 ? lines[linkLineIndex] : null;
+          const linkLine = linkLineIndex >= 0 ? fullJotLines[linkLineIndex] : null;
 
           if (linkLine) {
             // Calculate the indentation level of the link line
@@ -1145,10 +1145,10 @@
             } else if (linkIndent > 0) {
               // Only search upward if the link is indented (not a top-level bullet)
               for (let i = linkLineIndex - 1; i >= 0; i--) {
-                const candidate = lines[i].trim();
+                const candidate = fullJotLines[i].trim();
                 if (candidate === '') continue;
                 
-                const candidateIndent = lines[i].match(/^\s*/)[0].length;
+                const candidateIndent = fullJotLines[i].match(/^\s*/)[0].length;
                 
                 // Stop if we find a bullet with less indentation (parent level)
                 if (candidateIndent < linkIndent) {
@@ -1161,7 +1161,7 @@
               }
             }
           }
-
+          
           const contextParts = [];
           if (sectionHeadingText) contextParts.push(sectionHeadingText);
           if (parentLabel) contextParts.push(parentLabel);
