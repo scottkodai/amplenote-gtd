@@ -130,14 +130,6 @@
       return this._taskCache;
     },
 
-    // Add note to cache on new note creation
-    onNoteCreated: async function(app, noteUUID) {
-      const note = await app.notes.find(noteUUID);
-      if (!this._noteCache) return;
-      
-      // Add the new note to the cache
-      this._noteCache.push(note);
-    },
     //#endregion
     
     //#region Utility Functions
@@ -1792,6 +1784,14 @@
       if (!note) {
         await app.alert('❌ Could not find the current note.');
         return;
+      }
+
+      // Add note to cache if it doesn't exist
+      if (plugin._noteCache) {
+        const existsInCache = plugin._noteCache.some(n => n.uuid === noteUUID);
+        if (!existsInCache) {
+          plugin._noteCache.push(note);
+        }
       }
 
       // === Step 0: Bootstrap new notes with no tags ===
