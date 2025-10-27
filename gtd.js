@@ -2466,10 +2466,31 @@
           totalItems += summary.totalItems;
         }
 
+        // 3. Update active project notes
+        const activeProjectNotes = await plugin.getFilteredNotes(app, 'project/active');
+        const focusProjectNotes = await plugin.getFilteredNotes(app, 'project/focus');
+        const allActiveProjects = [...activeProjectNotes, ...focusProjectNotes];
+        
+        let projectNotesUpdated = 0;
+        let projectSectionsUpdated = 0;
+        let projectItemsUpdated = 0;
+
+        for (const note of allActiveProjects) {
+          const domainTags = note.tags.filter((t) => t.startsWith('d/'));
+          const summary = await plugin.updateAllRelatedSections(app, note.uuid, domainTags);
+          
+          projectNotesUpdated++;
+          projectSectionsUpdated += summary.updatedSections;
+          projectItemsUpdated += summary.totalItems;
+        }
+
         await app.alert(
           `✅ Updated ${totalNotes} list notes\n` +
             `Sections refreshed: ${totalSections}\n` +
-            `Total items updated: ${totalItems}`,
+            `Total items updated: ${totalItems}\n\n` +
+            `📋 Updated ${projectNotesUpdated} active projects\n` +
+            `Project sections refreshed: ${projectSectionsUpdated}\n` +
+            `Project items updated: ${projectItemsUpdated}`,
         );
       }, // end Update All Lists
       // =============================================================================================
