@@ -908,8 +908,8 @@
 
         const roots = rootsByStatus.get(status.tag) || [];
 
+        // Skip empty status groups entirely
         if (roots.length === 0) {
-          md += `    - *No matching projects*\n\n`;
           continue;
         }
 
