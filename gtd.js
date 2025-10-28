@@ -776,6 +776,7 @@
     ) {
       const plugin = this;
 
+      // Define labels for each project status
       const projectStatuses = [
         { tag: 'project/focus', label: 'Focus Projects' },
         { tag: 'project/active', label: 'Active Projects' },
@@ -787,9 +788,11 @@
         { tag: 'project/canceled', label: 'Canceled Projects' },
       ];
 
+      // Helper function to get the note-id of a note
       const getNoteId = (note) =>
         note.tags.find((t) => t.startsWith('note-id/'))?.split('/')[1] || null;
 
+      // Helper functions to check for parent/child tags
       const hasParentTag = (note) => note.tags.some((t) => t.startsWith('r/parent/'));
       const hasChildTag = (note) => note.tags.some((t) => t.startsWith('r/child/'));
       const getParentIds = (note) =>
@@ -904,14 +907,13 @@
       }
 
       for (const status of projectStatuses) {
-        md += `- ${status.label}\n`;
-
         const roots = rootsByStatus.get(status.tag) || [];
-
         // Skip empty status groups entirely
         if (roots.length === 0) {
           continue;
         }
+        // Add status label (but only if there are projects in this status)
+        md += `- ${status.label}\n`;
 
         if (status.tag === 'project/completed' && sortCompletedByDate) {
           roots.sort((a, b) => {
