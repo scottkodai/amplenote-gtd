@@ -544,35 +544,44 @@
       const plugin = this;
       const relatedNote = await app.notes.find(relatedHandle.uuid);
 
+      // Determine the note types of the related notes to decide relationship directionality
       const noteType = plugin.getNoteType(note);
       const relatedType = plugin.getNoteType(relatedNote);
 
-      // 🚫 Prevent adding two-way relationship between two projects
-      if (noteType.startsWith('project/') && relatedType.startsWith('project/')) {
-        await app.alert('❌ Project-to-project relationships must be set as Parent/Child.');
-        return;
-      }
-
+      // Get or create note-id tags for both notes
       const noteIdTag = await plugin.getNoteIdTag(app, note);
       const relatedNoteIdTag = await plugin.getNoteIdTag(app, relatedNote);
 
+      // Extract just the note-id values
       const noteId = noteIdTag.split('/')[1];
       const relatedNoteId = relatedNoteIdTag.split('/')[1];
 
-      // Project relationships should always be one-way
-      if (noteType === 'project') {
-        // Project notes have one-way relationship TO other notes (project → related)
+      // Project-to-project relationships are two-way
+      if (noteType === 'project' && relatedType === 'project') { //I'm on a project note linking TO another project note
+        const noteTag = `r/project/${relatedNoteId}`;
+        const relatedTag = `r/project/${noteId}`;
+        
+        await note.addTag(noteTag);
+        await relatedNote.addTag(relatedTag);
+        
+        plugin.updateCacheWithTag(note.uuid, noteTag);
+        plugin.updateCacheWithTag(relatedNote.uuid, relatedTag);
+      }      
+      
+      // Project to non-project relationships should always be one-way (project → other)
+      else if (noteType === 'project') {  // I'm on a project note linking TO a non-project note
         const tag = `r/${relatedType}/${relatedNoteId}`;
         await note.addTag(tag);
         // Update the note in the cache to include the new tag
         plugin.updateCacheWithTag(note.uuid, tag);
-      } else if (relatedType === 'project') {
-        // Other notes have one-way relationship FROM project notes (project → related)
+      } 
+      else if (relatedType === 'project') { // I'm on a non-project note linking TO a project
         const tag = `r/${noteType}/${noteId}`;
         await relatedNote.addTag(tag);
         // Update the related note in the cache
         plugin.updateCacheWithTag(relatedNote.uuid, tag);
-      } else {
+      } 
+      else { // I'm on a non-project note linking TO another non-project note
         // Non-project relationships are two-way
         const noteTag = `r/${relatedType}/${relatedNoteId}`;
         const relatedTag = `r/${noteType}/${noteId}`;
