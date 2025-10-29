@@ -988,7 +988,7 @@
     // Updates any existing Recent Updates section with backlinks from recent Daily Jots
     // Called from:
     // ===============================================================================================
-    updateRecentUpdatesSection: async function (app, noteUUID, maxEntries = 3) {
+    updateRecentUpdatesSection: async function (app, noteUUID, maxEntries = 4) {
       const sectionHeading = 'Recent Updates';
 
       // Helper function to parse date from jot title (e.g., "October 25th, 2025")
