@@ -2534,12 +2534,59 @@
         await this.setNoteTags(app, uuidMatch[1]);
       }, // end Set Note Tags
 
-      // ===============================================================================================
-      // Note option wrapper to clear all tags
-      // ===============================================================================================
-      'Clear Tags': async function (app, noteUUID) {
-        await this.clearAllTags(app, noteUUID);
-      }, // end Clear Tags
+      // =============================================================================================
+      // Update Note
+      // This function is the orchestrator for updating the current note in whatever ways are
+      // appropriate
+      // =============================================================================================
+      'Update Note': async function (app, link) {
+        const plugin = this;
+        const uuidMatch = link.href?.match(/\/notes\/([a-f0-9-]+)$/);
+        if (!uuidMatch) {
+          await app.alert('❌ Invalid note link.');
+          return;
+        }
+        const note = await app.notes.find(uuidMatch[1]);
+
+        // Detect any domain tags (d/work, d/home, etc.)
+        const domainTags = note.tags.filter((t) => t.startsWith('d/'));
+
+        //let summary = { updatedSections: 0, totalItems: 0 };
+
+        const isListNote = note.tags.some((t) => t.startsWith('list/'));
+        if (isListNote) {
+          const listType = note.tags.find((t) => t.startsWith('list/'));
+
+          switch (listType) {
+            case 'list/project':
+            case 'list/software':
+            case 'list/people':
+            case 'list/reference':
+              // Bracketed text flat mode updates, filtered by domain
+              //summary = await plugin.updateBracketedSections(app, note, listType, domainTags);
+              await plugin.updateBracketedSections(app, note, listType, domainTags);
+              break;
+
+            case 'list/related':
+              // Run existing Related * section updates, filtered by domain
+              //summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+              await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+              break;
+          }
+        } else {
+          // Non-list note → only update Related sections, filtered by domain
+          //summary = await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+          await plugin.updateAllRelatedSections(app, noteUUID, domainTags);
+        }
+
+        /*
+        await app.alert(
+          `✅ Update complete for "${note.name}"\n` +
+            `Sections updated: ${summary.updatedSections}\n` +
+            `Total items updated: ${summary.totalItems}`,
+        );
+        */
+      }, // end Update Note
     }, // end linkOption
     //#endregion
 
