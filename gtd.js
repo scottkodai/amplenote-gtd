@@ -2546,7 +2546,9 @@
           await app.alert('❌ Invalid note link.');
           return;
         }
-        const note = await app.notes.find(uuidMatch[1]);
+        const noteUUID = uuidMatch[1];
+        
+        const note = await app.notes.find(noteUUID);
 
         // Detect any domain tags (d/work, d/home, etc.)
         const domainTags = note.tags.filter((t) => t.startsWith('d/'));
