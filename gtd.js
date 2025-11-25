@@ -261,7 +261,7 @@
       
       // Now use the stable UUID for content insertion
       if (content) {
-        await app.insertNoteContent({ uuid: jot.uuid }, content, { atEnd: true });
+        await app.replaceNoteContent({ uuid: jot.uuid }, content);
       }
       
       return jot;
