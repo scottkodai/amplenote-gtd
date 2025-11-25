@@ -2515,8 +2515,7 @@
         }
       }
 
-      // Find the Inbox note and update the Tagging Cleanup section
-      const inbox = await app.findNote({ name: 'Inbox' });
+      // Update the Tagging Cleanup section in the Inbox note
       if (!inbox) {
         await app.alert('❌ Inbox note not found.');
         return;
