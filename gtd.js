@@ -132,7 +132,165 @@
 
     //#endregion
     
-    //#region Utility Functions
+    //#region Calendar Functions
+    // #################################################################################################
+    // #################################################################################################
+    //
+    //                                     Calendar Functions
+    // 
+    // #################################################################################################
+    // #################################################################################################
+
+    // ===============================================================================================
+    // Calculates the most recent Sunday
+    // Called from: 
+    // ===============================================================================================
+    _getMostRecentSunday: function() {
+      const today = new Date();
+      const dayOfWeek = today.getDay(); // 0 = Sunday
+      const daysToSubtract = dayOfWeek; // If today is Wed(3), go back 3 days
+      
+      const sunday = new Date(today);
+      sunday.setDate(today.getDate() - daysToSubtract);
+      sunday.setHours(0, 0, 0, 0);
+      return sunday;
+    }, //end _getMostRecentSunday
+
+    // ===============================================================================================  
+    // Build the 5-week calendar
+    // Called from: 
+    // ===============================================================================================
+    _buildFiveWeekCalendar: async function(app) {
+      const plugin = this;
+      
+      // Start one week before most recent Sunday
+      const startDate = plugin._getMostRecentSunday();
+      startDate.setDate(startDate.getDate() - 7);
+      
+      // Build 35 days (5 weeks)
+      const days = [];
+      for (let i = 0; i < 35; i++) {
+        const date = new Date(startDate);
+        date.setDate(startDate.getDate() + i);
+        days.push(date);
+      }
+      
+      // Create/find jots for each day
+      const jotMap = new Map();
+      for (const date of days) {
+        const jot = await plugin._getOrCreateDailyJot(app, date);
+        const dayKey = `${date.getMonth()}-${date.getDate()}`;
+        jotMap.set(dayKey, jot);
+      }
+      
+      // Build markdown table
+      return plugin._createCalendarMarkdown(days, jotMap);
+    }, // end _buildFiveWeekCalendar
+
+    // ===============================================================================================
+    // Get or create a Daily Jot for a specific date
+    // Called from: _buildFiveWeekCalendar
+    // ===============================================================================================
+    _getOrCreateDailyJot: async function(app, date) {
+      const plugin = this;
+      
+      // Format: "November 24th, 2025"
+      const jotName = plugin._formatJotName(date);
+      
+      // Check if jot already exists
+      let jot = await app.findNote({ name: jotName });
+      
+      if (!jot) {
+        // Create new jot with appropriate template
+        jot = await plugin._createNewJot(app, date, jotName);
+      }
+      
+      return jot;
+    }, // end _getOrCreateDailyJot
+
+    // ===============================================================================================
+    // Format date as "November 24th, 2025"
+    // Called from: _getOrCreateDailyJot
+    // ===============================================================================================
+    _formatJotName: function(date) {
+      const month = date.toLocaleString('en-US', { month: 'long' });
+      const day = date.getDate();
+      const year = date.getFullYear();
+      
+      // Add ordinal suffix (st, nd, rd, th)
+      const ordinal = (day) => {
+        const s = ["th", "st", "nd", "rd"];
+        const v = day % 100;
+        return day + (s[(v - 20) % 10] || s[v] || s[0]);
+      };
+      
+      return `${month} ${ordinal(day)}, ${year}`;
+    }, // end _formatJotName
+
+    // ===============================================================================================
+    // Create a new Daily Jot with appropriate template based on day of week
+    // Called from: _getOrCreateDailyJot
+    // ===============================================================================================  
+    _createNewJot: async function(app, date, jotName) {
+      const dayOfWeek = date.getDay(); // 0=Sun, 6=Sat
+      const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+      
+      // Choose template based on day
+      const templateName = isWeekend 
+        ? "Daily Jot template (home)" 
+        : "Daily Jot template (work)";
+      
+      const template = await app.findNote({ name: templateName });
+      let content = "";
+      
+      if (template) {
+        content = await app.getNoteContent(template);
+      }
+      
+      // Create the jot
+      const jot = await app.createNote(jotName, ["daily-jots"]);
+      
+      if (content) {
+        await app.insertNoteContent({ uuid: jot.uuid }, content, { atEnd: true });
+      }
+      
+      return jot;
+    }, // end _createNewJot
+
+    // ===============================================================================================
+    // Create markdown calendar table
+    // Called from: _buildFiveWeekCalendar
+    // ===============================================================================================
+    _createCalendarMarkdown: function(days, jotMap) {
+      const plugin = this;
+      
+      let md = "|S|M|T|W|T|F|S|\n|-|-|-|-|-|-|-|\n";
+      
+      for (let i = 0; i < days.length; i++) {
+        const date = days[i];
+        const dayNum = date.getDate();
+        const dayKey = `${date.getMonth()}-${date.getDate()}`;
+        const jot = jotMap.get(dayKey);
+        
+        // Create link to jot
+        const cell = jot 
+          ? `[${dayNum}](https://www.amplenote.com/notes/${jot.uuid})`
+          : dayNum;
+        
+        md += `|${cell}`;
+        
+        // End row every 7 days
+        if ((i + 1) % 7 === 0) {
+          md += "|\n";
+        }
+      }
+      
+      return md;
+    }, // end _createCalendarMarkdown
+
+    //#endregion
+
+  //#region Utility Functions
     // #################################################################################################
     // #################################################################################################
     //
@@ -983,6 +1141,31 @@
 
       return { updatedSections: totalUpdated, totalItems: totalCount };
     }, //end updateAllRelatedSections
+
+    // ===============================================================================================
+    // Inserts a five-week calendar into the Calendar section on a note
+    // Called from:
+    // ===============================================================================================
+    updateCalendarSection: async function(app, noteUUID) {
+      const sectionHeading = 'Calendar';
+      
+      // 1. Find section (don't create if missing)
+      const sections = await app.getNoteSections({ uuid: noteUUID });
+      const targetSection = sections.find(
+        (s) => s.heading && s.heading.text.toLowerCase() === sectionHeading.toLowerCase()
+      );
+      if (!targetSection) return { updated: false, count: 0 };
+      
+      // 2. Calculate date range (previous Sunday - 4 weeks ahead)
+      const calendar = await this._buildFiveWeekCalendar(app);
+      
+      // 3. Replace section content
+      await app.replaceNoteContent(noteUUID, calendar, {
+        section: { heading: { text: sectionHeading } }
+      });
+      
+      return { updated: true, count: 35 }; // 5 weeks = 35 days
+    }, //end updateCalendarSection
 
     // ===============================================================================================
     // Updates any existing Recent Updates section with backlinks from recent Daily Jots
@@ -2176,6 +2359,12 @@
       const plugin = this;
       const cleanupResults = [];
 
+      // Update calendar FIRST (creates new jots)
+      const inbox = await app.findNote({ name: 'Inbox' });
+      if (inbox) {
+        await plugin.updateCalendarSection(app, inbox.uuid);
+      }
+      
       // Refresh the notes cache and use cache throughout
       this.invalidateNoteCache();
       let allNotes = await plugin._getCachedNotes(app);
