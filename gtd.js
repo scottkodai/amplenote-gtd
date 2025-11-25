@@ -247,9 +247,19 @@
         content = await app.getNoteContent(template);
       }
       
-      // Create the jot
-      const jot = await app.createNote(jotName, ["daily-jots"]);
+      // Create the jot (returns temporary local UUID)
+      await app.createNote(jotName, ["daily-jots"]);
       
+      // Refetch by name to get the persisted note uuid
+      const jot = await app.findNote({ name: jotName });
+      
+      if (!jot) {
+        // Alert if we couldn't find the newly created jot
+        await app.alert(`❌ Failed to find newly created jot: ${jotName}`);
+        return null;
+      }
+      
+      // Now use the stable UUID for content insertion
       if (content) {
         await app.insertNoteContent({ uuid: jot.uuid }, content, { atEnd: true });
       }
