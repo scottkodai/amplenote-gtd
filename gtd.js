@@ -2369,7 +2369,16 @@
       const plugin = this;
       const cleanupResults = [];
 
-      // Update calendar FIRST (creates new jots)
+      // === Pre-check: Fix accidentally created notes without titles ===
+      const untaggedNotes = await app.filterNotes({ group: 'untagged' });
+      
+      for (const note of untaggedNotes) {
+        if (!note.name || note.name.trim() === '') {
+          await app.setNoteName(note, 'Untitled Note');
+        }
+      }
+
+      // Update calendar before refreshing note cache (since it might create new jots)
       const inbox = await app.findNote({ name: 'Inbox' });
       if (inbox) {
         await plugin.updateCalendarSection(app, inbox.uuid);
